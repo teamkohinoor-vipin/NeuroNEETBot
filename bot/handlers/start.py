@@ -20,7 +20,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Correct Answer  →  +1 point\n"
         "❌ Wrong Answer    →  –1 point\n\n"
         "🏆 Compete on the leaderboard with `/leaderboard` in the group!\n\n"
-        "👇 *Use the buttons below to get started:*"
+        "💞 Just add me in your group and i will send NEET Polls.\n\n"
+        "👇 *Use the buttons below to get more information:*"
     )
 
     keyboard = [
