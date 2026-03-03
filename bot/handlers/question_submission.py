@@ -14,11 +14,10 @@ TEMP_SUBJECT = "temp_subject"
 TEMP_CLASS = "temp_class"
 TEMP_CHAPTER = "temp_chapter"
 
-
 # ================= START ENTRY =================
 
 async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 🧹 Clear any previous conversation data to avoid state conflicts
+    # 🧹 Clear any previous conversation data
     context.user_data.clear()
 
     if update.effective_chat.type != "private":
@@ -42,7 +41,6 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return SUBJECT
 
-
 # ================= SUBJECT =================
 
 async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -60,7 +58,6 @@ async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text("Select class:", reply_markup=reply_markup)
     return CLASS_
-
 
 # ================= CLASS =================
 
@@ -95,7 +92,6 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return CHAPTER
 
-
 # ================= CHAPTER =================
 
 async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,7 +123,6 @@ async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return QUESTION
-
 
 # ================= RECEIVE QUESTION =================
 
@@ -168,7 +163,6 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Question saved. What next?", reply_markup=reply_markup)
 
     return NEXT_ACTION
-
 
 # ================= NEXT ACTION =================
 
@@ -215,7 +209,6 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         context.user_data.clear()
         return ConversationHandler.END
-
 
 # ================= CANCEL =================
 
