@@ -24,7 +24,6 @@ def admin_review_keyboard(batch_id: str, q_index: int, total: int):
             InlineKeyboardButton("❌ Reject Batch", callback_data=f"admin_delete_{batch_id}")
         ],
         [
-            # 🔥 Prev LEFT, Next RIGHT (as you wanted)
             InlineKeyboardButton("⏮ Prev", callback_data=f"admin_prev_{batch_id}_{q_index}"),
             InlineKeyboardButton("⏭ Next", callback_data=f"admin_next_{batch_id}_{q_index}")
         ]
@@ -67,7 +66,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == "delete":
         try:
-            await db["pending_batches"].delete_one({"_id": ObjectId(batch_id)})
+            await db.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
             await query.edit_message_text("❌ Batch rejected.")
 
             try:
@@ -111,18 +110,18 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if "_id" in question_copy:
                     del question_copy["_id"]
 
-                await db["questions"].insert_one(question_copy)
+                await db.db.questions.insert_one(question_copy)
 
             except Exception as e:
                 logger.error(f"Accept error: {e}")
                 await query.answer("❌ Failed to accept question.")
                 return
 
-        # Remove question from batch
+        # Remove question
         questions.pop(q_index)
 
         try:
-            await db["pending_batches"].update_one(
+            await db.db.pending_batches.update_one(
                 {"_id": ObjectId(batch_id)},
                 {"$set": {"questions": questions}}
             )
@@ -131,10 +130,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ Failed to update batch.")
             return
 
-        # If batch empty → delete batch
         if not questions:
             try:
-                await db["pending_batches"].delete_one(
+                await db.db.pending_batches.delete_one(
                     {"_id": ObjectId(batch_id)}
                 )
 
@@ -182,11 +180,3 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.error(f"Edit message error: {e}")
-        try:
-            await query.message.reply_text(
-                text,
-                parse_mode="Markdown",
-                reply_markup=admin_review_keyboard(batch_id, q_index, total)
-            )
-        except Exception as e2:
-            logger.error(f"Reply message error: {e2}")
