@@ -18,6 +18,8 @@ TEMP_CHAPTER = "temp_chapter"
 # ================= START ENTRY =================
 
 async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 🧹 Clear any previous conversation data to avoid state conflicts
+    context.user_data.clear()
 
     if update.effective_chat.type != "private":
         if update.message:
@@ -207,9 +209,9 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         await query.edit_message_text(
-    "📨 *Your question has been sent for admin review.*\n\nAfter approval, it will be added to the quiz system.",
-    parse_mode="Markdown"
-)
+            "📨 *Your question has been sent for admin review.*\n\nAfter approval, it will be added to the quiz system.",
+            parse_mode="Markdown"
+        )
 
         context.user_data.clear()
         return ConversationHandler.END
