@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from bot.database import db
+from bot.database import db as db_module
 from bot.database.models import get_pending_batch
 from bot.config import ADMIN_ID
 from bson import ObjectId
@@ -28,41 +28,59 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    print(f"✅ Admin callback triggered! Data: {query.data}")
+    logger.info(f"🔔 Admin callback received: {query.data}")
     
     if update.effective_user.id != ADMIN_ID:
-        await query.edit_message_text("❌ Unauthorized.")
+        logger.warning(f"❌ Unauthorized attempt by user {update.effective_user.id}")
+        await query.edit_message_text("❌ You are not authorized to perform this action.")
         return
 
     data = query.data.split("_")
-    action = data[1]          # accept, deleteq, delete, next, prev
+    action = data[1]
     batch_id = data[2]
     q_index = int(data[3]) if len(data) > 3 else 0
 
+    logger.info(f"📦 Parsed: action={action}, batch_id={batch_id}, q_index={q_index}")
+
     batch = await get_pending_batch(ObjectId(batch_id))
     if not batch:
-        await query.edit_message_text("❌ Batch not found.")
+        await query.edit_message_text("❌ Batch not found. It may have been already processed.")
         return
 
-    # 👤 Submitter info
+    # Get database object
+    db_obj = db_module.db
+    if db_obj is None:
+        logger.error("❌ Database not connected")
+        await query.edit_message_text("❌ Database connection error.")
+        return
+    
+    logger.info(f"db_obj type: {type(db_obj)}")  # Debug: should be motor database
+
+    # Submitter info
     submitter_id = batch.get("user_id", "Unknown")
     submitter_name = "Unknown"
-    
-    # Try to get username from database
-    user = await db.db.users.find_one({"user_id": submitter_id})
-    if user:
-        submitter_name = user.get("username") or user.get("first_name") or f"ID: {submitter_id}"
-    else:
-        submitter_name = f"ID: {submitter_id}"
+    try:
+        user = await db_obj.users.find_one({"user_id": submitter_id})
+        if user:
+            submitter_name = user.get("username") or user.get("first_name") or f"ID: {submitter_id}"
+        else:
+            submitter_name = f"ID: {submitter_id}"
+    except Exception as e:
+        logger.error(f"❌ Error fetching user info: {e}")
 
     # 🗑️ Delete entire batch
     if action == "delete":
-        await db.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
-        await query.edit_message_text("✅ Batch deleted permanently.")
-        await context.bot.send_message(
-            chat_id=submitter_id,
-            text="❌ Your question batch was rejected by admin."
-        )
+        try:
+            await db_module.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+            await query.edit_message_text("✅ Batch deleted permanently.")
+            await context.bot.send_message(
+                chat_id=submitter_id,
+                text="❌ Your question batch was rejected by admin."
+            )
+            logger.info(f"🗑️ Batch {batch_id} deleted by admin")
+        except Exception as e:
+            logger.error(f"❌ Error deleting batch: {e}")
+            await query.edit_message_text("❌ Failed to delete batch.")
         return
 
     questions = batch.get("questions", [])
@@ -71,46 +89,64 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     total = len(questions)
+    if q_index < 0 or q_index >= total:
+        q_index = 0
 
-    # ⏭️ Next / ⏮️ Prev navigation
+    # Navigation
     if action == "next":
         q_index = (q_index + 1) % total
     elif action == "prev":
         q_index = (q_index - 1) % total
-    
-    # ✅ Accept / 🗑️ Delete single question
+
+    # Accept / Delete single question
     elif action in ["accept", "deleteq"]:
         question = questions[q_index]
-        
+
         if action == "accept":
-            question["approved"] = True
-            await db.db.questions.insert_one(question)
-            await query.answer("✅ Question accepted!")
-        
-        elif action == "deleteq":
+            try:
+                question["approved"] = True
+                await db_obj.questions.insert_one(question)
+                await query.answer("✅ Question accepted!")
+                logger.info(f"✅ Question accepted: {question.get('question', '')[:50]}")
+            except Exception as e:
+                logger.error(f"❌ Error accepting question: {e}")
+                await query.answer("❌ Failed to accept question.")
+                return
+        else:  # deleteq
             await query.answer("🗑️ Question deleted!")
-        
+            logger.info(f"🗑️ Question deleted from batch: {question.get('question', '')[:50]}")
+
         # Remove question from batch
         questions.pop(q_index)
-        await db.db.pending_batches.update_one(
-            {"_id": ObjectId(batch_id)},
-            {"$set": {"questions": questions}}
-        )
-        
-        if not questions:
-            await db.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
-            await query.edit_message_text("✅ All questions processed. Batch closed.")
-            await context.bot.send_message(
-                chat_id=submitter_id,
-                text="✅ Your question batch has been fully reviewed. Thank you!"
+        try:
+            await db_module.db.pending_batches.update_one(
+                {"_id": ObjectId(batch_id)},
+                {"$set": {"questions": questions}}
             )
+        except Exception as e:
+            logger.error(f"❌ Error updating batch: {e}")
+            await query.edit_message_text("❌ Failed to update batch.")
             return
-        
+
+        # If batch becomes empty, delete it
+        if not questions:
+            try:
+                await db_module.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+                await query.edit_message_text("✅ All questions processed. Batch closed.")
+                await context.bot.send_message(
+                    chat_id=submitter_id,
+                    text="✅ Your question batch has been fully reviewed. Thank you!"
+                )
+            except Exception as e:
+                logger.error(f"❌ Error closing batch: {e}")
+                await query.edit_message_text("❌ Failed to close batch.")
+            return
+
         total = len(questions)
         if q_index >= total:
             q_index = total - 1
 
-    # Show current question with submitter info
+    # Show current question
     q = questions[q_index]
     text = (
         f"👤 *Submitted by:* {submitter_name}\n"
@@ -125,8 +161,12 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📅 *Year:* {q.get('year', 'N/A')}"
     )
     
-    await query.edit_message_text(
-        text,
-        parse_mode="Markdown",
-        reply_markup=admin_review_keyboard(batch_id, q_index, total)
-    )
+    try:
+        await query.edit_message_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=admin_review_keyboard(batch_id, q_index, total)
+        )
+    except Exception as e:
+        logger.error(f"❌ Error displaying question: {e}")
+        await query.edit_message_text("❌ An error occurred while displaying the question.")
