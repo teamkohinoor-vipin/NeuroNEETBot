@@ -207,8 +207,9 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         await query.edit_message_text(
-            "Batch submitted for admin approval. You'll be notified once reviewed."
-        )
+    "📨 *Your question has been sent for admin review.*\n\nAfter approval, it will be added to the quiz system.",
+    parse_mode="Markdown"
+)
 
         context.user_data.clear()
         return ConversationHandler.END
