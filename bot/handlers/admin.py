@@ -1,12 +1,13 @@
+import asyncio
+import logging
+from bson import ObjectId
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import RetryAfter
-from bot.database import db as db_module
+
+from bot.database.db import db
 from bot.database.models import get_pending_batch
 from bot.config import ADMIN_ID
-from bson import ObjectId
-import asyncio
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,9 @@ def admin_review_keyboard(batch_id: str, q_index: int, total: int):
             InlineKeyboardButton("❌ Reject Batch", callback_data=f"admin_delete_{batch_id}")
         ],
         [
-            # ✅ Next left, Prev right (as you wanted)
-            InlineKeyboardButton("⏭ Next", callback_data=f"admin_next_{batch_id}_{q_index}"),
-            InlineKeyboardButton("⏮ Prev", callback_data=f"admin_prev_{batch_id}_{q_index}")
+            # 🔥 Prev LEFT, Next RIGHT (as you wanted)
+            InlineKeyboardButton("⏮ Prev", callback_data=f"admin_prev_{batch_id}_{q_index}"),
+            InlineKeyboardButton("⏭ Next", callback_data=f"admin_next_{batch_id}_{q_index}")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -46,7 +47,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     parts = query.data.split("_")
-
     if len(parts) < 3:
         await query.answer("Invalid data")
         return
@@ -54,9 +54,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action = parts[1]
     batch_id = parts[2]
     q_index = int(parts[3]) if len(parts) > 3 else 0
-
-    # ✅ Correct DB reference
-    db = db_module.db
 
     batch = await get_pending_batch(ObjectId(batch_id))
     if not batch:
@@ -71,7 +68,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "delete":
         try:
             await db["pending_batches"].delete_one({"_id": ObjectId(batch_id)})
-
             await query.edit_message_text("❌ Batch rejected.")
 
             try:
@@ -159,6 +155,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         total = len(questions)
+
         if q_index >= total:
             q_index = total - 1
 
