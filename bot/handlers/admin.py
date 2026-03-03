@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# ================= KEYBOARD (Old Style) =================
+# ================= KEYBOARD (Fixed Button Order) =================
 
 def admin_review_keyboard(batch_id: str, q_index: int, total: int):
     keyboard = [
@@ -53,7 +53,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     batch_id = parts[2]
     q_index = int(parts[3]) if len(parts) > 3 else 0
 
-    # ✅ Correct database access (single .db)
+    # ✅ Correct database access
     db = db_module.db  # actual MongoDB database
 
     batch = await get_pending_batch(ObjectId(batch_id))
@@ -64,17 +64,21 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     submitter_id = batch.get("user_id")
     questions = batch.get("questions", [])
 
-    # ===== Reject Full Batch (Old Message) =====
+    # ===== REJECT BATCH (Fixed) =====
     if action == "delete":
-        await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
-        await query.edit_message_text("❌ Batch rejected.")
         try:
-            await context.bot.send_message(
-                chat_id=submitter_id,
-                text="❌ Your question batch was rejected by Admin."
-            )
-        except:
-            pass
+            await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+            await query.edit_message_text("❌ Batch rejected.")
+            try:
+                await context.bot.send_message(
+                    chat_id=submitter_id,
+                    text="❌ Your question batch was rejected by Admin."
+                )
+            except:
+                pass
+        except Exception as e:
+            logger.error(f"Reject batch error: {e}")
+            await query.edit_message_text("❌ Failed to reject batch.")
         return
 
     if not questions:
@@ -83,55 +87,64 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     total = len(questions)
 
-    # ===== Navigation =====
+    # ===== NAVIGATION =====
     if action == "next":
         q_index = (q_index + 1) % total
     elif action == "prev":
         q_index = (q_index - 1) % total
 
-    # ===== Accept / Delete Single =====
+    # ===== ACCEPT / DELETE SINGLE =====
     elif action in ["accept", "deleteq"]:
         question = questions[q_index]
 
         if action == "accept":
-            # Insert into main questions collection
-            question_copy = question.copy()
-            question_copy["approved"] = True
-            await db.questions.insert_one(question_copy)
+            try:
+                # Insert into main questions collection
+                question_copy = question.copy()
+                question_copy["approved"] = True
+                if "_id" in question_copy:
+                    del question_copy["_id"]
+                await db.questions.insert_one(question_copy)
+            except Exception as e:
+                logger.error(f"Accept error: {e}")
+                await query.answer("❌ Failed to accept question.")
+                return
 
-        # Remove question from batch (using $pull with a unique identifier)
-        # Since questions don't have _id, we use a combination of fields to identify uniquely.
-        # But simplest: remove by index using $set with filtered array.
-        # We'll pop and update entire array.
+        # Remove question from batch (using index)
         questions.pop(q_index)
-        await db.pending_batches.update_one(
-            {"_id": ObjectId(batch_id)},
-            {"$set": {"questions": questions}}
-        )
-
-        # Reload batch to check if empty
-        batch = await get_pending_batch(ObjectId(batch_id))
-        if not batch or not batch.get("questions"):
-            await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
-            await query.edit_message_text("✅ All questions processed.")
-
-            # 🎉 Acceptance Message (Old)
-            if action == "accept":
-                try:
-                    await context.bot.send_message(
-                        chat_id=submitter_id,
-                        text="🎉 Congratulations 👏\n\nYour questions have been accepted by Admin."
-                    )
-                except:
-                    pass
+        try:
+            await db.pending_batches.update_one(
+                {"_id": ObjectId(batch_id)},
+                {"$set": {"questions": questions}}
+            )
+        except Exception as e:
+            logger.error(f"Update batch error: {e}")
+            await query.edit_message_text("❌ Failed to update batch.")
             return
 
-        questions = batch["questions"]
+        # Check if batch is now empty
+        if not questions:
+            try:
+                await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+                await query.edit_message_text("✅ All questions processed.")
+                if action == "accept":
+                    try:
+                        await context.bot.send_message(
+                            chat_id=submitter_id,
+                            text="🎉 Congratulations 👏\n\nYour questions have been accepted by Admin."
+                        )
+                    except:
+                        pass
+            except Exception as e:
+                logger.error(f"Close batch error: {e}")
+                await query.edit_message_text("❌ Failed to close batch.")
+            return
+
         total = len(questions)
         if q_index >= total:
             q_index = total - 1
 
-    # ===== Show Question (Old Format) =====
+    # ===== SHOW QUESTION =====
     q = questions[q_index]
     text = (
         f"📝 *Question {q_index+1}/{total}*\n\n"
@@ -150,9 +163,13 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
             reply_markup=admin_review_keyboard(batch_id, q_index, total)
         )
-    except:
-        await query.message.reply_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=admin_review_keyboard(batch_id, q_index, total)
-        )
+    except Exception as e:
+        logger.error(f"Edit message error: {e}")
+        try:
+            await query.message.reply_text(
+                text,
+                parse_mode="Markdown",
+                reply_markup=admin_review_keyboard(batch_id, q_index, total)
+            )
+        except Exception as e2:
+            logger.error(f"Reply message error: {e2}")
