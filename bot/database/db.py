@@ -7,10 +7,11 @@ class Database:
 
 db = Database()
 
-async def connect_db():
+async def connect_db(app=None):   # 👈 add optional argument
     db.client = AsyncIOMotorClient(MONGO_URI)
     db.db = db.client["neetquiz"]
     print("✅ MongoDB connected")
 
-async def close_db():
-    db.client.close()
+async def close_db(app=None):     # 👈 add optional argument
+    if db.client:
+        db.client.close()
