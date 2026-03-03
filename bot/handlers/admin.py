@@ -5,43 +5,26 @@ from bot.database import db as db_module
 from bot.database.models import get_pending_batch
 from bot.config import ADMIN_ID
 from bson import ObjectId
-from asyncio import Lock
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
-admin_lock = Lock()
 
 
-# ================= KEYBOARD =================
+# ================= KEYBOARD (Old Style) =================
 
 def admin_review_keyboard(batch_id: str, q_index: int, total: int):
     keyboard = [
         [
-            InlineKeyboardButton(
-                "✅ Accept",
-                callback_data=f"admin_accept_{batch_id}_{q_index}"
-            ),
-            InlineKeyboardButton(
-                "🗑 Delete Q",
-                callback_data=f"admin_deleteq_{batch_id}_{q_index}"
-            )
+            InlineKeyboardButton("✅ Accept", callback_data=f"admin_accept_{batch_id}_{q_index}"),
+            InlineKeyboardButton("🗑 Delete Q", callback_data=f"admin_deleteq_{batch_id}_{q_index}")
         ],
         [
-            InlineKeyboardButton(
-                "❌ Reject Batch",
-                callback_data=f"admin_delete_{batch_id}_0"
-            )
+            InlineKeyboardButton("❌ Reject Batch", callback_data=f"admin_delete_{batch_id}")
         ],
         [
-            InlineKeyboardButton(
-                "⏮ Prev",
-                callback_data=f"admin_prev_{batch_id}_{q_index}"
-            ),
-            InlineKeyboardButton(
-                "⏭ Next",
-                callback_data=f"admin_next_{batch_id}_{q_index}"
-            )
+            InlineKeyboardButton("⏮ Prev", callback_data=f"admin_prev_{batch_id}_{q_index}"),
+            InlineKeyboardButton("⏭ Next", callback_data=f"admin_next_{batch_id}_{q_index}")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -50,7 +33,6 @@ def admin_review_keyboard(batch_id: str, q_index: int, total: int):
 # ================= CALLBACK =================
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     query = update.callback_query
 
     try:
@@ -63,78 +45,78 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     parts = query.data.split("_")
-    if len(parts) < 4:
+    if len(parts) < 3:
         await query.answer("Invalid data")
         return
 
     action = parts[1]
     batch_id = parts[2]
-    q_index = int(parts[3])
+    q_index = int(parts[3]) if len(parts) > 3 else 0
 
-    async with admin_lock:
+    # ✅ Correct database access (single .db)
+    db = db_module.db  # actual MongoDB database
 
-        db = db_module.db.db
-        batch = await get_pending_batch(ObjectId(batch_id))
+    batch = await get_pending_batch(ObjectId(batch_id))
+    if not batch:
+        await query.edit_message_text("❌ Batch not found.")
+        return
 
-        if not batch:
-            await query.edit_message_text("❌ Batch not found.")
-            return
+    submitter_id = batch.get("user_id")
+    questions = batch.get("questions", [])
 
-        submitter_id = batch.get("user_id")
-        questions = batch.get("questions", [])
-
-        if not questions:
-            await query.edit_message_text("No questions left.")
-            return
-
-        total = len(questions)
-
-        # ===== Reject Full Batch =====
-        if action == "delete":
-            await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
-
-            await query.edit_message_text("❌ Batch rejected.")
-
-            try:
-                await context.bot.send_message(
-                    chat_id=submitter_id,
-                    text="❌ Your question batch was rejected by Admin."
-                )
-            except:
-                pass
-            return
-
-        # ===== Navigation =====
-        if action == "next":
-            q_index = (q_index + 1) % total
-        elif action == "prev":
-            q_index = (q_index - 1) % total
-
-        # ===== Accept / Delete Single =====
-        elif action in ["accept", "deleteq"]:
-
-            question = questions[q_index]
-
-            if action == "accept":
-                question_copy = question.copy()
-                question_copy.pop("_id", None)
-                question_copy["approved"] = True
-                await db.questions.insert_one(question_copy)
-
-            await db.pending_batches.update_one(
-                {"_id": ObjectId(batch_id)},
-                {"$pull": {"questions": {"_id": question["_id"]}}}
+    # ===== Reject Full Batch (Old Message) =====
+    if action == "delete":
+        await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+        await query.edit_message_text("❌ Batch rejected.")
+        try:
+            await context.bot.send_message(
+                chat_id=submitter_id,
+                text="❌ Your question batch was rejected by Admin."
             )
+        except:
+            pass
+        return
 
-            # Reload batch
-            batch = await get_pending_batch(ObjectId(batch_id))
+    if not questions:
+        await query.edit_message_text("No questions left.")
+        return
 
-            if not batch or not batch.get("questions"):
-                await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+    total = len(questions)
 
-                await query.edit_message_text("✅ All questions processed.")
+    # ===== Navigation =====
+    if action == "next":
+        q_index = (q_index + 1) % total
+    elif action == "prev":
+        q_index = (q_index - 1) % total
 
-                # 🎉 Acceptance Message
+    # ===== Accept / Delete Single =====
+    elif action in ["accept", "deleteq"]:
+        question = questions[q_index]
+
+        if action == "accept":
+            # Insert into main questions collection
+            question_copy = question.copy()
+            question_copy["approved"] = True
+            await db.questions.insert_one(question_copy)
+
+        # Remove question from batch (using $pull with a unique identifier)
+        # Since questions don't have _id, we use a combination of fields to identify uniquely.
+        # But simplest: remove by index using $set with filtered array.
+        # We'll pop and update entire array.
+        questions.pop(q_index)
+        await db.pending_batches.update_one(
+            {"_id": ObjectId(batch_id)},
+            {"$set": {"questions": questions}}
+        )
+
+        # Reload batch to check if empty
+        batch = await get_pending_batch(ObjectId(batch_id))
+        if not batch or not batch.get("questions"):
+            await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+            await query.edit_message_text("✅ All questions processed.")
+
+            # 🎉 Acceptance Message (Old)
+            if action == "accept":
                 try:
                     await context.bot.send_message(
                         chat_id=submitter_id,
@@ -142,37 +124,35 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 except:
                     pass
-                return
+            return
 
-            questions = batch["questions"]
-            total = len(questions)
+        questions = batch["questions"]
+        total = len(questions)
+        if q_index >= total:
+            q_index = total - 1
 
-            if q_index >= total:
-                q_index = total - 1
+    # ===== Show Question (Old Format) =====
+    q = questions[q_index]
+    text = (
+        f"📝 *Question {q_index+1}/{total}*\n\n"
+        f"{q['question']}\n\n"
+        f"A) {q['options'][0]}\n"
+        f"B) {q['options'][1]}\n"
+        f"C) {q['options'][2]}\n"
+        f"D) {q['options'][3]}\n\n"
+        f"✅ *Correct:* {chr(65+q['correct_index'])}\n"
+        f"📅 *Year:* {q.get('year', 'N/A')}"
+    )
 
-        # ===== Show Question =====
-        q = questions[q_index]
-
-        text = (
-            f"📝 *Question {q_index+1}/{total}*\n\n"
-            f"{q['question']}\n\n"
-            f"A) {q['options'][0]}\n"
-            f"B) {q['options'][1]}\n"
-            f"C) {q['options'][2]}\n"
-            f"D) {q['options'][3]}\n\n"
-            f"✅ *Correct:* {chr(65+q['correct_index'])}\n"
-            f"📅 *Year:* {q.get('year', 'N/A')}"
+    try:
+        await query.edit_message_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=admin_review_keyboard(batch_id, q_index, total)
         )
-
-        try:
-            await query.edit_message_text(
-                text,
-                parse_mode="Markdown",
-                reply_markup=admin_review_keyboard(batch_id, q_index, total)
-            )
-        except:
-            await query.message.reply_text(
-                text,
-                parse_mode="Markdown",
-                reply_markup=admin_review_keyboard(batch_id, q_index, total)
-            )
+    except:
+        await query.message.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=admin_review_keyboard(batch_id, q_index, total)
+        )
