@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# ================= KEYBOARD (Fixed Button Order) =================
+# ================= KEYBOARD =================
 
 def admin_review_keyboard(batch_id: str, q_index: int, total: int):
     keyboard = [
@@ -23,8 +23,9 @@ def admin_review_keyboard(batch_id: str, q_index: int, total: int):
             InlineKeyboardButton("❌ Reject Batch", callback_data=f"admin_delete_{batch_id}")
         ],
         [
-            InlineKeyboardButton("⏮ Prev", callback_data=f"admin_prev_{batch_id}_{q_index}"),
-            InlineKeyboardButton("⏭ Next", callback_data=f"admin_next_{batch_id}_{q_index}")
+            # ✅ Next left, Prev right (as you wanted)
+            InlineKeyboardButton("⏭ Next", callback_data=f"admin_next_{batch_id}_{q_index}"),
+            InlineKeyboardButton("⏮ Prev", callback_data=f"admin_prev_{batch_id}_{q_index}")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -45,6 +46,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     parts = query.data.split("_")
+
     if len(parts) < 3:
         await query.answer("Invalid data")
         return
@@ -53,8 +55,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     batch_id = parts[2]
     q_index = int(parts[3]) if len(parts) > 3 else 0
 
-    # ✅ Correct database access
-    db = db_module.db  # actual MongoDB database
+    # ✅ Correct DB reference
+    db = db_module.db
 
     batch = await get_pending_batch(ObjectId(batch_id))
     if not batch:
@@ -64,11 +66,14 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     submitter_id = batch.get("user_id")
     questions = batch.get("questions", [])
 
-    # ===== REJECT BATCH (Fixed) =====
+    # ================= REJECT BATCH =================
+
     if action == "delete":
         try:
-            await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+            await db["pending_batches"].delete_one({"_id": ObjectId(batch_id)})
+
             await query.edit_message_text("❌ Batch rejected.")
+
             try:
                 await context.bot.send_message(
                     chat_id=submitter_id,
@@ -76,6 +81,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except:
                 pass
+
         except Exception as e:
             logger.error(f"Reject batch error: {e}")
             await query.edit_message_text("❌ Failed to reject batch.")
@@ -87,33 +93,40 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     total = len(questions)
 
-    # ===== NAVIGATION =====
+    # ================= NAVIGATION =================
+
     if action == "next":
         q_index = (q_index + 1) % total
+
     elif action == "prev":
         q_index = (q_index - 1) % total
 
-    # ===== ACCEPT / DELETE SINGLE =====
+    # ================= ACCEPT / DELETE SINGLE =================
+
     elif action in ["accept", "deleteq"]:
+
         question = questions[q_index]
 
         if action == "accept":
             try:
-                # Insert into main questions collection
                 question_copy = question.copy()
                 question_copy["approved"] = True
+
                 if "_id" in question_copy:
                     del question_copy["_id"]
-                await db.questions.insert_one(question_copy)
+
+                await db["questions"].insert_one(question_copy)
+
             except Exception as e:
                 logger.error(f"Accept error: {e}")
                 await query.answer("❌ Failed to accept question.")
                 return
 
-        # Remove question from batch (using index)
+        # Remove question from batch
         questions.pop(q_index)
+
         try:
-            await db.pending_batches.update_one(
+            await db["pending_batches"].update_one(
                 {"_id": ObjectId(batch_id)},
                 {"$set": {"questions": questions}}
             )
@@ -122,11 +135,15 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ Failed to update batch.")
             return
 
-        # Check if batch is now empty
+        # If batch empty → delete batch
         if not questions:
             try:
-                await db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+                await db["pending_batches"].delete_one(
+                    {"_id": ObjectId(batch_id)}
+                )
+
                 await query.edit_message_text("✅ All questions processed.")
+
                 if action == "accept":
                     try:
                         await context.bot.send_message(
@@ -135,6 +152,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     except:
                         pass
+
             except Exception as e:
                 logger.error(f"Close batch error: {e}")
                 await query.edit_message_text("❌ Failed to close batch.")
@@ -144,8 +162,10 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if q_index >= total:
             q_index = total - 1
 
-    # ===== SHOW QUESTION =====
+    # ================= SHOW QUESTION =================
+
     q = questions[q_index]
+
     text = (
         f"📝 *Question {q_index+1}/{total}*\n\n"
         f"{q['question']}\n\n"
