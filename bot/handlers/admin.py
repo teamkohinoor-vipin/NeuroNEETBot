@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from bot.database import db as db_module
+from bot.database import db as db_module  # db_module = Database instance
 from bot.database.models import get_pending_batch
 from bot.config import ADMIN_ID
 from bson import ObjectId
@@ -27,9 +27,9 @@ def admin_review_keyboard(batch_id: str, q_index: int, total: int):
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
+
     logger.info(f"🔔 Admin callback received: {query.data}")
-    
+
     if update.effective_user.id != ADMIN_ID:
         logger.warning(f"❌ Unauthorized attempt by user {update.effective_user.id}")
         await query.edit_message_text("❌ You are not authorized to perform this action.")
@@ -47,20 +47,14 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Batch not found. It may have been already processed.")
         return
 
-    # Get database object
-    db_obj = db_module.db
-    if db_obj is None:
-        logger.error("❌ Database not connected")
-        await query.edit_message_text("❌ Database connection error.")
-        return
-    
-    logger.info(f"db_obj type: {type(db_obj)}")  # Debug: should be motor database
+    # ✅ Correct database access
+    db = db_module.db  # actual MongoDB database
 
     # Submitter info
     submitter_id = batch.get("user_id", "Unknown")
     submitter_name = "Unknown"
     try:
-        user = await db_obj.users.find_one({"user_id": submitter_id})
+        user = await db.users.find_one({"user_id": submitter_id})
         if user:
             submitter_name = user.get("username") or user.get("first_name") or f"ID: {submitter_id}"
         else:
@@ -105,7 +99,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if action == "accept":
             try:
                 question["approved"] = True
-                await db_obj.questions.insert_one(question)
+                await db.questions.insert_one(question)
                 await query.answer("✅ Question accepted!")
                 logger.info(f"✅ Question accepted: {question.get('question', '')[:50]}")
             except Exception as e:
@@ -160,7 +154,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ *Correct:* {chr(65+q['correct_index'])}\n"
         f"📅 *Year:* {q.get('year', 'N/A')}"
     )
-    
+
     try:
         await query.edit_message_text(
             text,
