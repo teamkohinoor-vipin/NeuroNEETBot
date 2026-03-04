@@ -166,7 +166,7 @@ def main():
     # ---------- FALLBACK ----------
 
     application.add_handler(
-        CallbackQueryHandler(unmatched_callback, block=False)
+        CallbackQueryHandler(unmatched_callback)
     )
 
     # ---------- ERROR ----------
