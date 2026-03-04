@@ -14,6 +14,9 @@ GROUP_ID = int(os.getenv("GROUP_ID", 0))
 TIMEZONE = "Asia/Kolkata"
 QUIZ_INTERVAL_MINUTES = 20
 
+# ✅ FIX (scheduler ke liye)
+SCHEDULE = ["09:00", "12:00", "15:00", "18:00", "21:00"]
+
 CHAPTERS_PER_PAGE = 5
 
 
@@ -44,7 +47,7 @@ def class_menu(subject):
 # CHAPTER MENU (Pagination)
 def chapter_menu(subject, class_no, page=0):
 
-    class_no = int(class_no)  # FIX
+    class_no = int(class_no)
 
     chapters = CHAPTERS[subject][class_no]
 
