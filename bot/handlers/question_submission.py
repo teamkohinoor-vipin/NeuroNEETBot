@@ -26,9 +26,9 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
 
     keyboard = [
-        [InlineKeyboardButton("Physics", callback_data="sub_Physics")],
-        [InlineKeyboardButton("Chemistry", callback_data="sub_Chemistry")],
-        [InlineKeyboardButton("Biology", callback_data="sub_Biology")]
+        [InlineKeyboardButton("⚛️Physics", callback_data="sub_Physics")],
+        [InlineKeyboardButton("🧪Chemistry", callback_data="sub_Chemistry")],
+        [InlineKeyboardButton("🧬Biology", callback_data="sub_Biology")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
