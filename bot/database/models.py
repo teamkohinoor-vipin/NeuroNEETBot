@@ -6,8 +6,8 @@ from bson import ObjectId
 async def get_user(user_id: int):
     return await db.db.users.find_one({"user_id": user_id})
 
+
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
-    # Ensure user document exists
     await db.db.users.update_one(
         {"user_id": user_id},
         {"$setOnInsert": {
@@ -29,9 +29,13 @@ async def update_user_stats(user_id: int, username: str, correct: bool, chapter:
         },
         "$set": {"username": username}
     }
+
     await db.db.users.update_one({"user_id": user_id}, update)
 
+
+# ---------- Leaderboard ----------
 async def get_top_users(limit: int = 10, since: datetime = None):
+
     if since:
         pipeline = [
             {"$match": {"timestamp": {"$gte": since}}},
@@ -43,28 +47,37 @@ async def get_top_users(limit: int = 10, since: datetime = None):
             {"$sort": {"points": -1}},
             {"$limit": limit}
         ]
+
         cursor = db.db.answers.aggregate(pipeline)
         return await cursor.to_list(length=limit)
+
     else:
         cursor = db.db.users.find({}).sort("total_points", -1).limit(limit)
         return await cursor.to_list(length=limit)
+
 
 # ---------- Questions ----------
 async def add_question(question_data: dict):
     result = await db.db.questions.insert_one(question_data)
     return result.inserted_id
 
+
 async def get_random_question(subject: str):
+
     pipeline = [
         {"$match": {"subject": subject, "approved": True}},
         {"$sample": {"size": 1}}
     ]
+
     cursor = db.db.questions.aggregate(pipeline)
     questions = await cursor.to_list(length=1)
+
     return questions[0] if questions else None
+
 
 # ---------- Pending Batches ----------
 async def create_pending_batch(user_id: int, subject: str, class_: int, chapter: str):
+
     batch = {
         "user_id": user_id,
         "subject": subject,
@@ -74,26 +87,35 @@ async def create_pending_batch(user_id: int, subject: str, class_: int, chapter:
         "status": "pending",
         "created_at": datetime.utcnow()
     }
+
     result = await db.db.pending_batches.insert_one(batch)
     return result.inserted_id
 
+
 async def add_question_to_batch(batch_id: ObjectId, question: dict):
+
     await db.db.pending_batches.update_one(
         {"_id": batch_id},
         {"$push": {"questions": question}}
     )
 
+
 async def get_pending_batch(batch_id: ObjectId):
+
     return await db.db.pending_batches.find_one({"_id": batch_id})
 
+
 async def update_batch_status(batch_id: ObjectId, status: str):
+
     await db.db.pending_batches.update_one(
         {"_id": batch_id},
         {"$set": {"status": status}}
     )
 
+
 # ---------- Poll Logs ----------
 async def log_poll(poll_id: int, question_id: ObjectId, subject: str, chapter: str, chat_id: int):
+
     await db.db.poll_logs.insert_one({
         "poll_id": poll_id,
         "question_id": question_id,
@@ -103,17 +125,25 @@ async def log_poll(poll_id: int, question_id: ObjectId, subject: str, chapter: s
         "timestamp": datetime.utcnow()
     })
 
+
 async def get_poll_log(poll_id: int):
+
     return await db.db.poll_logs.find_one({"poll_id": poll_id})
 
+
 async def get_question_by_poll(poll_id: int):
+
     log = await get_poll_log(poll_id)
+
     if log:
         return await db.db.questions.find_one({"_id": log["question_id"]})
+
     return None
 
-# ---------- Answers (for leaderboard) ----------
+
+# ---------- Answers ----------
 async def record_answer(user_id: int, username: str, question_id: ObjectId, points_change: int):
+
     await db.db.answers.insert_one({
         "user_id": user_id,
         "username": username,
@@ -121,3 +151,29 @@ async def record_answer(user_id: int, username: str, question_id: ObjectId, poin
         "points_change": points_change,
         "timestamp": datetime.utcnow()
     })
+
+
+# =========================================================
+# 🆕 MULTI GROUP SUPPORT (NEW)
+# =========================================================
+
+async def add_group(chat_id: int):
+
+    await db.db.groups.update_one(
+        {"chat_id": chat_id},
+        {"$set": {"chat_id": chat_id}},
+        upsert=True
+    )
+
+
+async def remove_group(chat_id: int):
+
+    await db.db.groups.delete_one({"chat_id": chat_id})
+
+
+async def get_all_groups():
+
+    cursor = db.db.groups.find({})
+    groups = await cursor.to_list(length=None)
+
+    return [g["chat_id"] for g in groups]
