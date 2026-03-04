@@ -1,12 +1,26 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from bot.config import SUPPORT_CHANNEL, DEVELOPER_USERNAME
+from bot.database.db import db
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user.first_name
     chat_type = update.effective_chat.type
+
+    # Save user
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+
+    await db.db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "user_id": user_id,
+            "username": username
+        }},
+        upsert=True
+    )
 
     text = (
         f"🧪 *Welcome {user} to NEET Quiz Bot!* 🧪\n\n"
@@ -23,6 +37,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "❌ Wrong → -1 point\n\n"
 
         "🏆 Use `/leaderboard` in group to see rankings.\n\n"
+
         "👇 Use the buttons below:"
     )
 
