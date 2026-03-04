@@ -5,16 +5,13 @@ from bot.utils.validators import validate_question
 from bot.config import ADMIN_ID, CHAPTERS, chapter_menu
 from bson import ObjectId
 
-# States
 SUBJECT, CLASS_, CHAPTER, QUESTION, NEXT_ACTION = range(5)
 
-# Temp keys
 BATCH_ID = "batch_id"
 TEMP_SUBJECT = "temp_subject"
 TEMP_CLASS = "temp_class"
 TEMP_CHAPTER = "temp_chapter"
 
-# ================= START ENTRY =================
 
 async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -41,7 +38,6 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "📚 Please select the subject given below:",
             reply_markup=reply_markup
         )
-
     else:
         await update.message.reply_text(
             "📚 Please select the subject given below:",
@@ -50,8 +46,6 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     return SUBJECT
 
-
-# ================= SUBJECT =================
 
 async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -66,29 +60,15 @@ async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔘Class 12", callback_data="class_12")]
     ]
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await query.edit_message_text(
         "🎉Please select the class given below:",
-        reply_markup=reply_markup
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
     return CLASS_
 
 
-# ================= CLASS =================
-
 async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    class_ = int(query.data.split("_")[1])
-    context.user_data[TEMP_CLASS] = class_
-
-    subject = context.user_data[TEMP_SUBJECT]
-
-     async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
@@ -110,9 +90,7 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     return CHAPTER
-await
 
-# ================= CHAPTER PAGE =================
 
 async def chapter_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -126,12 +104,10 @@ async def chapter_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     page = int(data[3])
 
     await query.edit_message_text(
-        "Select chapter:",
+        "🎯Please Select Chapter Name:",
         reply_markup=chapter_menu(subject, class_, page)
     )
 
-
-# ================= CHAPTER SELECT =================
 
 async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -172,8 +148,6 @@ async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return QUESTION
 
 
-# ================= RECEIVE QUESTION =================
-
 async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
@@ -212,83 +186,61 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("✅ Done", callback_data="done_q")]
     ]
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_text(
         "Question saved. What next?",
-        reply_markup=reply_markup
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
     return NEXT_ACTION
 
-
-# ================= NEXT ACTION =================
 
 async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
 
-    action = query.data
-
-    if action == "next_q":
-
-        await query.edit_message_text(
-            "Send the next question:"
-        )
-
+    if query.data == "next_q":
+        await query.edit_message_text("Send the next question:")
         return QUESTION
 
-    else:
+    batch_id = context.user_data.get(BATCH_ID)
+    batch = await get_pending_batch(ObjectId(batch_id))
 
-        batch_id = context.user_data.get(BATCH_ID)
-        batch = await get_pending_batch(ObjectId(batch_id))
+    from bot.handlers.admin import admin_review_keyboard
 
-        if not batch:
-            await query.edit_message_text(
-                "Batch not found."
-            )
-            return ConversationHandler.END
+    admin_text = (
+        f"New question batch from @{update.effective_user.username} "
+        f"(ID: {update.effective_user.id})\n"
+        f"Subject: {batch['subject']}\n"
+        f"Class: {batch['class']}\n"
+        f"Chapter: {batch['chapter']}\n"
+        f"Total questions: {len(batch['questions'])}\n\n"
+        "Use buttons to review."
+    )
 
-        from bot.handlers.admin import admin_review_keyboard
-
-        admin_text = (
-            f"New question batch from @{update.effective_user.username} "
-            f"(ID: {update.effective_user.id})\n"
-            f"Subject: {batch['subject']}\n"
-            f"Class: {batch['class']}\n"
-            f"Chapter: {batch['chapter']}\n"
-            f"Total questions: {len(batch['questions'])}\n\n"
-            "Use buttons to review."
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=admin_text,
+        reply_markup=admin_review_keyboard(
+            str(batch_id),
+            0,
+            len(batch['questions'])
         )
+    )
 
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=admin_text,
-            reply_markup=admin_review_keyboard(
-                str(batch_id),
-                0,
-                len(batch['questions'])
-            )
-        )
+    await query.edit_message_text(
+        "📨 *Your question has been sent for admin review.*\n\nAfter approval it will be added to quiz system.",
+        parse_mode="Markdown"
+    )
 
-        await query.edit_message_text(
-            "📨 *Your question has been sent for admin review.*\n\nAfter approval, it will be added to the quiz system.",
-            parse_mode="Markdown"
-        )
+    context.user_data.clear()
 
-        context.user_data.clear()
+    return ConversationHandler.END
 
-        return ConversationHandler.END
-
-
-# ================= CANCEL =================
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    await update.message.reply_text(
-        "Question submission cancelled."
-    )
+    await update.message.reply_text("Question submission cancelled.")
 
     context.user_data.clear()
 
