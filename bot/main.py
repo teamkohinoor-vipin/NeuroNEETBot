@@ -38,6 +38,10 @@ from bot.handlers.question_submission import (
 from bot.handlers.admin import admin_callback
 from bot.handlers.error import error_handler
 
+from bot.handlers.admin_stats import stats
+from bot.handlers.broadcast import broadcast
+
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -69,6 +73,10 @@ def main():
         )
 
     application.add_handler(CommandHandler("start", start))
+
+    application.add_handler(CommandHandler("stats", stats))
+
+    application.add_handler(CommandHandler("broadcast", broadcast))
 
     application.add_handler(
         CallbackQueryHandler(help_callback, pattern="^help$")
