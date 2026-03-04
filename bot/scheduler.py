@@ -2,61 +2,98 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from pytz import timezone
 from datetime import datetime
-from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES, GROUP_ID, SCHEDULE
-from bot.database.models import get_random_question, log_poll
 from telegram import Bot, Poll
 import logging
+
+from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES, SCHEDULE
+from bot.database.models import get_random_question, log_poll, get_all_groups
 
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler(timezone=timezone(TIMEZONE))
 
+# store last poll per group
+last_polls = {}
+
+# -------- SUBJECT TIME BLOCK --------
 def get_current_subject():
     now = datetime.now(timezone(TIMEZONE)).hour
+
     for block in SCHEDULE:
         if block["start"] <= now < block["end"]:
             return block["subject"]
-    return None  # Sleep mode
 
+    return None
+
+
+# -------- SEND QUIZ --------
 async def send_quiz(bot: Bot):
+
     subject = get_current_subject()
+
     if not subject:
-        logger.info("😴 Sleep mode – no quiz")
+        logger.info("😴 Sleep mode active")
         return
 
     question = await get_random_question(subject)
+
     if not question:
-        logger.warning(f"No approved question for {subject}")
+        logger.warning(f"No question found for {subject}")
         return
 
     options = question["options"]
     correct_option_id = question["correct_index"]
 
-    message = await bot.send_poll(
-        chat_id=GROUP_ID,
-        question=question["question"],
-        options=options,
-        type=Poll.QUIZ,
-        correct_option_id=correct_option_id,
-        is_anonymous=False
-    )
+    groups = await get_all_groups()
 
-    await log_poll(
-        poll_id=message.poll.id,
-        question_id=question["_id"],
-        subject=subject,
-        chapter=question["chapter"],
-        chat_id=GROUP_ID
-    )
-    logger.info(f"📊 Sent quiz: {question['question'][:30]}...")
+    for chat_id in groups:
 
+        try:
+
+            # delete previous poll
+            if chat_id in last_polls:
+                try:
+                    await bot.delete_message(chat_id, last_polls[chat_id])
+                except:
+                    pass
+
+            message = await bot.send_poll(
+                chat_id=chat_id,
+                question=question["question"],
+                options=options,
+                type=Poll.QUIZ,
+                correct_option_id=correct_option_id,
+                is_anonymous=False
+            )
+
+            last_polls[chat_id] = message.message_id
+
+            await log_poll(
+                poll_id=message.poll.id,
+                question_id=question["_id"],
+                subject=subject,
+                chapter=question["chapter"],
+                chat_id=chat_id
+            )
+
+        except Exception as e:
+
+            logger.warning(f"Failed in {chat_id} : {e}")
+
+    logger.info("📊 Quiz sent to all groups")
+
+
+# -------- START SCHEDULER --------
 async def start_scheduler(bot: Bot):
+
     scheduler.add_job(
         send_quiz,
         trigger=IntervalTrigger(minutes=QUIZ_INTERVAL_MINUTES),
         args=[bot],
-        id="send_quiz_job",
+        id="quiz_job",
         replace_existing=True
     )
+
     scheduler.start()
+
     logger.info("⏰ Scheduler started")
