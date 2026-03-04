@@ -35,9 +35,9 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if update.callback_query:
         query = update.callback_query
         await query.answer()
-        await query.edit_message_text("Select subject:", reply_markup=reply_markup)
+        await query.edit_message_text("📚 Please select the subject given below:", reply_markup=reply_markup)
     else:
-        await update.message.reply_text("Select subject:", reply_markup=reply_markup)
+        await update.message.reply_text("📚 Please select the subject given below:", reply_markup=reply_markup)
 
     return SUBJECT
 
