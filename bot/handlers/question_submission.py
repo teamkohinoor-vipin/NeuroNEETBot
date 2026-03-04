@@ -2,8 +2,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from bot.database.models import create_pending_batch, add_question_to_batch, get_pending_batch
 from bot.utils.validators import validate_question
-from bot.config import ADMIN_ID, CHAPTERS
+from bot.config import ADMIN_ID, CHAPTERS, chapter_menu
 from bson import ObjectId
+
 
 # States
 SUBJECT, CLASS_, CHAPTER, QUESTION, NEXT_ACTION = range(5)
@@ -14,10 +15,11 @@ TEMP_SUBJECT = "temp_subject"
 TEMP_CLASS = "temp_class"
 TEMP_CHAPTER = "temp_chapter"
 
+
 # ================= START ENTRY =================
 
 async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 🧹 Clear any previous conversation data
+
     context.user_data.clear()
 
     if update.effective_chat.type != "private":
@@ -30,20 +32,33 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         [InlineKeyboardButton("🧪Chemistry", callback_data="sub_Chemistry")],
         [InlineKeyboardButton("🧬Biology", callback_data="sub_Biology")]
     ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if update.callback_query:
+
         query = update.callback_query
         await query.answer()
-        await query.edit_message_text("📚 Please select the subject given below:", reply_markup=reply_markup)
+
+        await query.edit_message_text(
+            "📚 Please select the subject given below:",
+            reply_markup=reply_markup
+        )
+
     else:
-        await update.message.reply_text("📚 Please select the subject given below:", reply_markup=reply_markup)
+
+        await update.message.reply_text(
+            "📚 Please select the subject given below:",
+            reply_markup=reply_markup
+        )
 
     return SUBJECT
+
 
 # ================= SUBJECT =================
 
 async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
     await query.answer()
 
@@ -54,14 +69,21 @@ async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔘Class 11", callback_data="class_11")],
         [InlineKeyboardButton("🔘Class 12", callback_data="class_12")]
     ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text("🎉Please select the class given below:", reply_markup=reply_markup)
+    await query.edit_message_text(
+        "🎉Please select the class given below:",
+        reply_markup=reply_markup
+    )
+
     return CLASS_
+
 
 # ================= CLASS =================
 
 async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
     await query.answer()
 
@@ -69,36 +91,49 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data[TEMP_CLASS] = class_
 
     subject = context.user_data[TEMP_SUBJECT]
-    chapters = CHAPTERS.get(subject, {}).get(class_, [])
 
-    if not chapters:
-        await query.edit_message_text("No chapters available for this subject/class.")
-        return ConversationHandler.END
-
-    keyboard = []
-    row = []
-
-    for ch in chapters:
-        row.append(InlineKeyboardButton(ch, callback_data=f"chap_{ch}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-
-    if row:
-        keyboard.append(row)
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text("Select chapter:", reply_markup=reply_markup)
+    await query.edit_message_text(
+        "Select chapter:",
+        reply_markup=chapter_menu(subject, class_, 0)
+    )
 
     return CHAPTER
 
-# ================= CHAPTER =================
 
-async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ================= CHAPTER PAGE =================
+
+async def chapter_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
     await query.answer()
 
-    chapter = query.data.split("_", 1)[1]
+    data = query.data.split("_")
+
+    subject = data[1]
+    class_ = int(data[2])
+    page = int(data[3])
+
+    await query.edit_message_text(
+        "Select chapter:",
+        reply_markup=chapter_menu(subject, class_, page)
+    )
+
+
+# ================= CHAPTER SELECT =================
+
+async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data.split("_")
+
+    subject = data[1]
+    class_ = int(data[2])
+    index = int(data[3])
+
+    chapter = CHAPTERS[subject][class_][index]
+
     context.user_data[TEMP_CHAPTER] = chapter
 
     batch_id = await create_pending_batch(
@@ -124,20 +159,30 @@ async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return QUESTION
 
+
 # ================= RECEIVE QUESTION =================
 
 async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     text = update.message.text
     batch_id = context.user_data.get(BATCH_ID)
 
     if not batch_id:
-        await update.message.reply_text("Session expired. Start over with /start.")
+
+        await update.message.reply_text(
+            "Session expired. Start over with /start."
+        )
+
         return ConversationHandler.END
 
     is_valid, result = validate_question(text)
 
     if not is_valid:
-        await update.message.reply_text(f"❌ Invalid format: {result}\n\nPlease try again.")
+
+        await update.message.reply_text(
+            f"❌ Invalid format: {result}\n\nPlease try again."
+        )
+
         return QUESTION
 
     question_data = {
@@ -158,30 +203,46 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("➕ Next Question", callback_data="next_q")],
         [InlineKeyboardButton("✅ Done", callback_data="done_q")]
     ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text("Question saved. What next?", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "Question saved. What next?",
+        reply_markup=reply_markup
+    )
 
     return NEXT_ACTION
+
 
 # ================= NEXT ACTION =================
 
 async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
     await query.answer()
 
     action = query.data
 
     if action == "next_q":
-        await query.edit_message_text("Send the next question:")
+
+        await query.edit_message_text(
+            "Send the next question:"
+        )
+
         return QUESTION
 
-    else:  # done_q
+    else:
+
         batch_id = context.user_data.get(BATCH_ID)
 
         batch = await get_pending_batch(ObjectId(batch_id))
+
         if not batch:
-            await query.edit_message_text("Batch not found.")
+
+            await query.edit_message_text(
+                "Batch not found."
+            )
+
             return ConversationHandler.END
 
         from bot.handlers.admin import admin_review_keyboard
@@ -199,7 +260,11 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=admin_text,
-            reply_markup=admin_review_keyboard(str(batch_id), 0, len(batch['questions']))
+            reply_markup=admin_review_keyboard(
+                str(batch_id),
+                0,
+                len(batch['questions'])
+            )
         )
 
         await query.edit_message_text(
@@ -208,11 +273,18 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         context.user_data.clear()
+
         return ConversationHandler.END
+
 
 # ================= CANCEL =================
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Question submission cancelled.")
+
+    await update.message.reply_text(
+        "Question submission cancelled."
+    )
+
     context.user_data.clear()
+
     return ConversationHandler.END
