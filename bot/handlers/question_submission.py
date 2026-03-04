@@ -92,10 +92,19 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     subject = context.user_data[TEMP_SUBJECT]
 
-    await query.edit_message_text(
-        "🎯Please Select Chapter Name:",
-        reply_markup=chapter_menu(subject, class_, 0)
-    )
+    try:
+
+        await query.edit_message_text(
+            "🎯Please Select Chapter Name:",
+            reply_markup=chapter_menu(subject, class_, 0)
+        )
+
+    except:
+
+        await query.message.reply_text(
+            "🎯Please Select Chapter Name:",
+            reply_markup=chapter_menu(subject, class_, 0)
+        )
 
     return CHAPTER
 
@@ -113,10 +122,15 @@ async def chapter_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     class_ = int(data[2])
     page = int(data[3])
 
-    await query.edit_message_text(
-        "🎯Please Select Chapter Name:",
-        reply_markup=chapter_menu(subject, class_, page)
-    )
+    try:
+
+        await query.edit_message_text(
+            "🎯Please Select Chapter Name:",
+            reply_markup=chapter_menu(subject, class_, page)
+        )
+
+    except:
+        pass
 
 
 # ================= CHAPTER SELECT =================
