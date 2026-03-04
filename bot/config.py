@@ -14,40 +14,10 @@ GROUP_ID = int(os.getenv("GROUP_ID", 0))
 TIMEZONE = "Asia/Kolkata"
 QUIZ_INTERVAL_MINUTES = 20
 
-# ✅ FIX (scheduler ke liye)
-SCHEDULE = ["09:00", "12:00", "15:00", "18:00", "21:00"]
-
 CHAPTERS_PER_PAGE = 5
 
 
-# SUBJECT MENU
-def subject_menu():
-
-    buttons = [
-        [InlineKeyboardButton("⚡ Physics", callback_data="subject_Physics")],
-        [InlineKeyboardButton("⚛ Chemistry", callback_data="subject_Chemistry")],
-        [InlineKeyboardButton("🧬 Biology", callback_data="subject_Biology")],
-    ]
-
-    return InlineKeyboardMarkup(buttons)
-
-
-# CLASS MENU
-def class_menu(subject):
-
-    buttons = [
-        [InlineKeyboardButton("Class 11", callback_data=f"class_{subject}_11")],
-        [InlineKeyboardButton("Class 12", callback_data=f"class_{subject}_12")],
-        [InlineKeyboardButton("🔙 Back", callback_data="subject_menu")]
-    ]
-
-    return InlineKeyboardMarkup(buttons)
-
-
-# CHAPTER MENU (Pagination)
 def chapter_menu(subject, class_no, page=0):
-
-    class_no = int(class_no)
 
     chapters = CHAPTERS[subject][class_no]
 
@@ -59,6 +29,7 @@ def chapter_menu(subject, class_no, page=0):
     buttons = []
 
     for i, ch in enumerate(page_chapters):
+
         buttons.append([
             InlineKeyboardButton(
                 ch,
@@ -90,14 +61,13 @@ def chapter_menu(subject, class_no, page=0):
     buttons.append([
         InlineKeyboardButton(
             "🔙 Class Menu",
-            callback_data=f"class_{subject}"
+            callback_data=f"class_{class_no}"
         )
     ])
 
     return InlineKeyboardMarkup(buttons)
 
 
-# NEET CHAPTERS
 CHAPTERS = {
 
 "Physics": {
@@ -190,19 +160,7 @@ CHAPTERS = {
 "🔘 Structural Organisation in Animals",
 "🔘 Cell: The Unit of Life",
 "🔘 Biomolecules",
-"🔘 Cell Cycle and Cell Division",
-"🔘 Transport in Plants",
-"🔘 Mineral Nutrition",
-"🔘 Photosynthesis in Higher Plants",
-"🔘 Respiration in Plants",
-"🔘 Plant Growth and Development",
-"🔘 Digestion and Absorption",
-"🔘 Breathing and Exchange of Gases",
-"🔘 Body Fluids and Circulation",
-"🔘 Excretory Products and their Elimination",
-"🔘 Locomotion and Movement",
-"🔘 Neural Control and Coordination",
-"🔘 Chemical Coordination and Integration"
+"🔘 Cell Cycle and Cell Division"
 ],
 
 12: [
@@ -210,18 +168,7 @@ CHAPTERS = {
 "🔘 Sexual Reproduction in Flowering Plants",
 "🔘 Human Reproduction",
 "🔘 Reproductive Health",
-"🔘 Principles of Inheritance and Variation",
-"🔘 Molecular Basis of Inheritance",
-"🔘 Evolution",
-"🔘 Human Health and Disease",
-"🔘 Strategies for Enhancement in Food Production",
-"🔘 Microbes in Human Welfare",
-"🔘 Biotechnology: Principles and Processes",
-"🔘 Biotechnology and its Applications",
-"🔘 Organisms and Populations",
-"🔘 Ecosystem",
-"🔘 Biodiversity and Conservation",
-"🔘 Environmental Issues"
+"🔘 Principles of Inheritance and Variation"
 ]
 
 }
