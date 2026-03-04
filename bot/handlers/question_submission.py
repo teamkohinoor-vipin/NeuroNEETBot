@@ -51,12 +51,12 @@ async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data[TEMP_SUBJECT] = subject
 
     keyboard = [
-        [InlineKeyboardButton("Class 11", callback_data="class_11")],
-        [InlineKeyboardButton("Class 12", callback_data="class_12")]
+        [InlineKeyboardButton("🔘Class 11", callback_data="class_11")],
+        [InlineKeyboardButton("🔘Class 12", callback_data="class_12")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text("Select class:", reply_markup=reply_markup)
+    await query.edit_message_text("🎉Please select the class given below:", reply_markup=reply_markup)
     return CLASS_
 
 # ================= CLASS =================
