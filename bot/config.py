@@ -44,6 +44,8 @@ def class_menu(subject):
 # CHAPTER MENU (Pagination)
 def chapter_menu(subject, class_no, page=0):
 
+    class_no = int(class_no)  # FIX
+
     chapters = CHAPTERS[subject][class_no]
 
     start = page * CHAPTERS_PER_PAGE
@@ -53,32 +55,43 @@ def chapter_menu(subject, class_no, page=0):
 
     buttons = []
 
-    for ch in page_chapters:
+    for i, ch in enumerate(page_chapters):
         buttons.append([
-            InlineKeyboardButton(ch, callback_data="chapter")
+            InlineKeyboardButton(
+                ch,
+                callback_data=f"chapter_{subject}_{class_no}_{start+i}"
+            )
         ])
 
     nav = []
 
     if page > 0:
         nav.append(
-            InlineKeyboardButton("⬅ Back", callback_data=f"chap_{subject}_{class_no}_{page-1}")
+            InlineKeyboardButton(
+                "⬅ Back",
+                callback_data=f"chap_{subject}_{class_no}_{page-1}"
+            )
         )
 
     if end < len(chapters):
         nav.append(
-            InlineKeyboardButton("➡ Next", callback_data=f"chap_{subject}_{class_no}_{page+1}")
+            InlineKeyboardButton(
+                "➡ Next",
+                callback_data=f"chap_{subject}_{class_no}_{page+1}"
+            )
         )
 
     if nav:
         buttons.append(nav)
 
     buttons.append([
-        InlineKeyboardButton("🔙 Class Menu", callback_data=f"class_{subject}")
+        InlineKeyboardButton(
+            "🔙 Class Menu",
+            callback_data=f"class_{subject}"
+        )
     ])
 
     return InlineKeyboardMarkup(buttons)
-
 
 
 # NEET CHAPTERS
