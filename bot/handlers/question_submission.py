@@ -6,10 +6,8 @@ from bot.config import ADMIN_ID, CHAPTERS, chapter_menu
 from bson import ObjectId
 
 
-# States
 SUBJECT, CLASS_, CHAPTER, QUESTION, NEXT_ACTION = range(5)
 
-# Temp keys
 BATCH_ID = "batch_id"
 TEMP_SUBJECT = "temp_subject"
 TEMP_CLASS = "temp_class"
@@ -36,7 +34,6 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if update.callback_query:
-
         query = update.callback_query
         await query.answer()
 
@@ -92,19 +89,10 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     subject = context.user_data[TEMP_SUBJECT]
 
-    try:
-
-        await query.edit_message_text(
-            "🎯Please Select Chapter Name:",
-            reply_markup=chapter_menu(subject, class_, 0)
-        )
-
-    except:
-
-        await query.message.reply_text(
-            "🎯Please Select Chapter Name:",
-            reply_markup=chapter_menu(subject, class_, 0)
-        )
+    await query.edit_message_text(
+        "🎯Please Select Chapter Name:",
+        reply_markup=chapter_menu(subject, class_, 0)
+    )
 
     return CHAPTER
 
@@ -122,15 +110,10 @@ async def chapter_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     class_ = int(data[2])
     page = int(data[3])
 
-    try:
-
-        await query.edit_message_text(
-            "🎯Please Select Chapter Name:",
-            reply_markup=chapter_menu(subject, class_, page)
-        )
-
-    except:
-        pass
+    await query.edit_message_text(
+        "🎯Please Select Chapter Name:",
+        reply_markup=chapter_menu(subject, class_, page)
+    )
 
 
 # ================= CHAPTER SELECT =================
@@ -248,7 +231,6 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
 
         batch_id = context.user_data.get(BATCH_ID)
-
         batch = await get_pending_batch(ObjectId(batch_id))
 
         if not batch:
