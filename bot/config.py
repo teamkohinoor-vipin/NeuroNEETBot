@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 load_dotenv()
 
@@ -13,12 +14,74 @@ GROUP_ID = int(os.getenv("GROUP_ID", 0))
 TIMEZONE = "Asia/Kolkata"
 QUIZ_INTERVAL_MINUTES = 20
 
-SCHEDULE = [
-    {"start": 6, "end": 12, "subject": "Physics"},
-    {"start": 12, "end": 18, "subject": "Chemistry"},
-    {"start": 18, "end": 24, "subject": "Biology"},
-]
+CHAPTERS_PER_PAGE = 5
 
+
+# SUBJECT MENU
+def subject_menu():
+
+    buttons = [
+        [InlineKeyboardButton("⚡ Physics", callback_data="subject_Physics")],
+        [InlineKeyboardButton("⚛ Chemistry", callback_data="subject_Chemistry")],
+        [InlineKeyboardButton("🧬 Biology", callback_data="subject_Biology")],
+    ]
+
+    return InlineKeyboardMarkup(buttons)
+
+
+# CLASS MENU
+def class_menu(subject):
+
+    buttons = [
+        [InlineKeyboardButton("Class 11", callback_data=f"class_{subject}_11")],
+        [InlineKeyboardButton("Class 12", callback_data=f"class_{subject}_12")],
+        [InlineKeyboardButton("🔙 Back", callback_data="subject_menu")]
+    ]
+
+    return InlineKeyboardMarkup(buttons)
+
+
+# CHAPTER MENU (Pagination)
+def chapter_menu(subject, class_no, page=0):
+
+    chapters = CHAPTERS[subject][class_no]
+
+    start = page * CHAPTERS_PER_PAGE
+    end = start + CHAPTERS_PER_PAGE
+
+    page_chapters = chapters[start:end]
+
+    buttons = []
+
+    for ch in page_chapters:
+        buttons.append([
+            InlineKeyboardButton(ch, callback_data="chapter")
+        ])
+
+    nav = []
+
+    if page > 0:
+        nav.append(
+            InlineKeyboardButton("⬅ Back", callback_data=f"chap_{subject}_{class_no}_{page-1}")
+        )
+
+    if end < len(chapters):
+        nav.append(
+            InlineKeyboardButton("➡ Next", callback_data=f"chap_{subject}_{class_no}_{page+1}")
+        )
+
+    if nav:
+        buttons.append(nav)
+
+    buttons.append([
+        InlineKeyboardButton("🔙 Class Menu", callback_data=f"class_{subject}")
+    ])
+
+    return InlineKeyboardMarkup(buttons)
+
+
+
+# NEET CHAPTERS
 CHAPTERS = {
 
 "Physics": {
