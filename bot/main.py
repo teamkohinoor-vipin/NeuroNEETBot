@@ -163,6 +163,12 @@ def main():
 
     application.add_handler(conv_handler)
 
+    # ---------- EXTRA FIX FOR CLASS BUTTON ----------
+
+    application.add_handler(
+        CallbackQueryHandler(class_callback, pattern="^class_")
+    )
+
     # ---------- FALLBACK ----------
 
     application.add_handler(
