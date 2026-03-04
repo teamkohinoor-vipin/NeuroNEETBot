@@ -18,6 +18,7 @@ SCHEDULE = ["09:00", "12:00", "15:00", "18:00", "21:00"]
 
 CHAPTERS_PER_PAGE = 5
 
+
 def chapter_menu(subject, class_no, page=0):
 
     chapters = CHAPTERS[subject][class_no]
@@ -58,13 +59,6 @@ def chapter_menu(subject, class_no, page=0):
 
     if nav:
         buttons.append(nav)
-
-    buttons.append([
-        InlineKeyboardButton(
-            "🔙 Class Menu",
-            callback_data=f"class_{class_no}"
-        )
-    ])
 
     return InlineKeyboardMarkup(buttons)
 
