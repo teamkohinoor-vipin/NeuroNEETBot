@@ -2,12 +2,14 @@ from datetime import datetime
 from bot.database.db import db
 from bson import ObjectId
 
+
 # ---------- Users ----------
 async def get_user(user_id: int):
     return await db.db.users.find_one({"user_id": user_id})
 
 
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
+
     await db.db.users.update_one(
         {"user_id": user_id},
         {"$setOnInsert": {
@@ -34,31 +36,34 @@ async def update_user_stats(user_id: int, username: str, correct: bool, chapter:
 
 
 # ---------- Leaderboard ----------
-async def get_top_users(limit: int = 10, since: datetime = None):
+async def get_top_users(chat_id: int, limit: int = 10, since: datetime = None):
+
+    match = {"chat_id": chat_id}
 
     if since:
-        pipeline = [
-            {"$match": {"timestamp": {"$gte": since}}},
-            {"$group": {
-                "_id": "$user_id",
-                "username": {"$first": "$username"},
-                "points": {"$sum": "$points_change"}
-            }},
-            {"$sort": {"points": -1}},
-            {"$limit": limit}
-        ]
+        match["timestamp"] = {"$gte": since}
 
-        cursor = db.db.answers.aggregate(pipeline)
-        return await cursor.to_list(length=limit)
+    pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": "$user_id",
+            "username": {"$first": "$username"},
+            "points": {"$sum": "$points_change"}
+        }},
+        {"$sort": {"points": -1}},
+        {"$limit": limit}
+    ]
 
-    else:
-        cursor = db.db.users.find({}).sort("total_points", -1).limit(limit)
-        return await cursor.to_list(length=limit)
+    cursor = db.db.answers.aggregate(pipeline)
+
+    return await cursor.to_list(length=limit)
 
 
 # ---------- Questions ----------
 async def add_question(question_data: dict):
+
     result = await db.db.questions.insert_one(question_data)
+
     return result.inserted_id
 
 
@@ -70,6 +75,7 @@ async def get_random_question(subject: str):
     ]
 
     cursor = db.db.questions.aggregate(pipeline)
+
     questions = await cursor.to_list(length=1)
 
     return questions[0] if questions else None
@@ -89,6 +95,7 @@ async def create_pending_batch(user_id: int, subject: str, class_: int, chapter:
     }
 
     result = await db.db.pending_batches.insert_one(batch)
+
     return result.inserted_id
 
 
@@ -142,19 +149,20 @@ async def get_question_by_poll(poll_id: int):
 
 
 # ---------- Answers ----------
-async def record_answer(user_id: int, username: str, question_id: ObjectId, points_change: int):
+async def record_answer(user_id: int, username: str, question_id: ObjectId, points_change: int, chat_id: int):
 
     await db.db.answers.insert_one({
         "user_id": user_id,
         "username": username,
         "question_id": question_id,
         "points_change": points_change,
+        "chat_id": chat_id,
         "timestamp": datetime.utcnow()
     })
 
 
 # =========================================================
-# 🆕 MULTI GROUP SUPPORT (NEW)
+# MULTI GROUP SUPPORT
 # =========================================================
 
 async def add_group(chat_id: int):
@@ -174,6 +182,7 @@ async def remove_group(chat_id: int):
 async def get_all_groups():
 
     cursor = db.db.groups.find({})
+
     groups = await cursor.to_list(length=None)
 
     return [g["chat_id"] for g in groups]
