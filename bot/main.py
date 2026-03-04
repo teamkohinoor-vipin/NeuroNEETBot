@@ -38,7 +38,6 @@ from bot.handlers.question_submission import (
 from bot.handlers.admin import admin_callback
 from bot.handlers.error import error_handler
 
-
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -47,36 +46,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# -------- FALLBACK CALLBACK --------
-
 async def unmatched_callback(update: Update, context):
 
-    logger.warning(f"❓ Unknown callback: {update.callback_query.data}")
+    logger.warning(f"Unknown callback: {update.callback_query.data}")
 
     await update.callback_query.answer(
         "This button is not available. Use /start again."
     )
 
 
-# -------- MAIN --------
-
 def main():
 
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # database lifecycle
     application.post_init = connect_db
     application.post_shutdown = close_db
 
-    # scheduler start
     if application.job_queue:
-
         application.job_queue.run_once(
             lambda ctx: start_scheduler(ctx.bot),
             when=5
         )
-
-    # ---------- BASIC COMMANDS ----------
 
     application.add_handler(CommandHandler("start", start))
 
@@ -96,13 +86,9 @@ def main():
         PollAnswerHandler(poll_answer)
     )
 
-    # ---------- ADMIN CALLBACK ----------
-
     application.add_handler(
         CallbackQueryHandler(admin_callback, pattern="^admin_")
     )
-
-    # ---------- QUESTION SUBMISSION ----------
 
     conv_handler = ConversationHandler(
 
@@ -163,19 +149,9 @@ def main():
 
     application.add_handler(conv_handler)
 
-    # ---------- EXTRA FIX FOR CLASS BUTTON ----------
-
-    application.add_handler(
-        CallbackQueryHandler(class_callback, pattern="^class_")
-    )
-
-    # ---------- FALLBACK ----------
-
     application.add_handler(
         CallbackQueryHandler(unmatched_callback)
     )
-
-    # ---------- ERROR ----------
 
     application.add_error_handler(error_handler)
 
