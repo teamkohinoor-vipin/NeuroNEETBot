@@ -18,11 +18,13 @@ from bot.scheduler import start_scheduler
 from bot.handlers.start import start, help_callback
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
 from bot.handlers.poll_answer import poll_answer
+
 from bot.handlers.question_submission import (
     add_question_start,
     subject_callback,
     class_callback,
     chapter_callback,
+    chapter_page,
     receive_question,
     next_action_callback,
     cancel,
@@ -46,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 
 # -------- FALLBACK CALLBACK --------
+
 async def unmatched_callback(update: Update, context):
 
     logger.warning(f"❓ Unknown callback: {update.callback_query.data}")
@@ -56,6 +59,7 @@ async def unmatched_callback(update: Update, context):
 
 
 # -------- MAIN --------
+
 def main():
 
     application = Application.builder().token(BOT_TOKEN).build()
@@ -118,7 +122,17 @@ def main():
             ],
 
             CHAPTER: [
-                CallbackQueryHandler(chapter_callback, pattern="^chap_")
+
+                CallbackQueryHandler(
+                    chapter_page,
+                    pattern="^chap_"
+                ),
+
+                CallbackQueryHandler(
+                    chapter_callback,
+                    pattern="^chapter_"
+                )
+
             ],
 
             QUESTION: [
