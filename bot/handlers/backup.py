@@ -5,19 +5,23 @@ from telegram.ext import ContextTypes
 from bot.database.db import db
 from bot.config import ADMIN_ID
 from bson import ObjectId
+from datetime import datetime
 
 
-# -------- OBJECTID FIX --------
-def convert_objectid(data):
+# -------- DATA CONVERTER --------
+def convert_data(data):
 
     if isinstance(data, ObjectId):
         return str(data)
 
+    if isinstance(data, datetime):
+        return data.isoformat()
+
     if isinstance(data, list):
-        return [convert_objectid(i) for i in data]
+        return [convert_data(i) for i in data]
 
     if isinstance(data, dict):
-        return {k: convert_objectid(v) for k, v in data.items()}
+        return {k: convert_data(v) for k, v in data.items()}
 
     return data
 
@@ -54,7 +58,7 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             async for doc in cursor:
 
-                doc = convert_objectid(doc)
+                doc = convert_data(doc)
 
                 data[col].append(doc)
 
