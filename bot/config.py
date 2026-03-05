@@ -14,7 +14,11 @@ GROUP_ID = int(os.getenv("GROUP_ID", 0))
 TIMEZONE = "Asia/Kolkata"
 QUIZ_INTERVAL_MINUTES = 1
 
-SCHEDULE = ["09:00", "12:00", "15:00", "18:00", "21:00"]
+SCHEDULE = [
+    {"subject": "Physics", "start": 6, "end": 12},
+    {"subject": "Chemistry", "start": 12, "end": 18},
+    {"subject": "Biology", "start": 18, "end": 24}
+]
 
 CHAPTERS_PER_PAGE = 5
 
