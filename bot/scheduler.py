@@ -8,15 +8,17 @@ import logging
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES, SCHEDULE
 from bot.database.models import get_random_question, log_poll, get_all_groups
 
+# ✅ backup import
+from bot.handlers.backup import backup
+
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler(timezone=timezone(TIMEZONE))
 
-# store last poll per group
 last_polls = {}
 
-# -------- SUBJECT TIME BLOCK --------
 def get_current_subject():
+
     now = datetime.now(timezone(TIMEZONE)).hour
 
     for block in SCHEDULE:
@@ -26,7 +28,6 @@ def get_current_subject():
     return None
 
 
-# -------- SEND QUIZ --------
 async def send_quiz(bot: Bot):
 
     subject = get_current_subject()
@@ -50,7 +51,6 @@ async def send_quiz(bot: Bot):
 
         try:
 
-            # delete previous poll
             if chat_id in last_polls:
                 try:
                     await bot.delete_message(chat_id, last_polls[chat_id])
@@ -77,13 +77,11 @@ async def send_quiz(bot: Bot):
             )
 
         except Exception as e:
-
             logger.warning(f"Failed in {chat_id} : {e}")
 
     logger.info("📊 Quiz sent to all groups")
 
 
-# -------- START SCHEDULER --------
 async def start_scheduler(bot: Bot):
 
     scheduler.add_job(
@@ -91,6 +89,15 @@ async def start_scheduler(bot: Bot):
         trigger=IntervalTrigger(minutes=QUIZ_INTERVAL_MINUTES),
         args=[bot],
         id="quiz_job",
+        replace_existing=True
+    )
+
+    # ✅ daily backup job
+    scheduler.add_job(
+        backup,
+        trigger=IntervalTrigger(hours=24),
+        args=[None, None],
+        id="backup_job",
         replace_existing=True
     )
 
