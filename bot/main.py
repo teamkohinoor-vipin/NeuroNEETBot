@@ -43,6 +43,9 @@ from bot.handlers.error import error_handler
 from bot.handlers.admin_stats import stats
 from bot.handlers.broadcast import broadcast
 
+# ✅ BACKUP IMPORT
+from bot.handlers.backup import backup, restore
+
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -88,6 +91,10 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
 
     application.add_handler(CommandHandler("broadcast", broadcast))
+
+    # ✅ BACKUP COMMANDS
+    application.add_handler(CommandHandler("backup", backup))
+    application.add_handler(CommandHandler("restore", restore))
 
     application.add_handler(
         CallbackQueryHandler(help_callback, pattern="^help$")
