@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from bot.config import ADMIN_ID
 from bot.database.db import db
+from bot.config import ADMIN_ID
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -12,16 +12,18 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = await db.db.users.count_documents({})
     questions = await db.db.questions.count_documents({})
     pending = await db.db.pending_batches.count_documents({"status": "pending"})
+    groups = await db.db.groups.count_documents({})
 
-    stats = await db.client.admin.command("dbStats")
-    size = round(stats["dataSize"] / (1024 * 1024), 2)
+    stats = await db.db.command("dbStats")
+    db_size = round(stats["dataSize"] / (1024 * 1024), 2)
 
     text = (
-        "📊 *NeuroNEETBot Stats*\n\n"
+        "📊 NeuroNEETBot Stats\n\n"
         f"👥 Users : {users}\n"
+        f"👥 Groups : {groups}\n"
         f"🧠 Questions : {questions}\n"
         f"📝 Pending Batches : {pending}\n"
-        f"💾 Database Size : {size} MB"
+        f"💾 Database Size : {db_size} MB"
     )
 
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(text)
