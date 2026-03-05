@@ -4,8 +4,25 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database.db import db
 from bot.config import ADMIN_ID
+from bson import ObjectId
 
 
+# -------- OBJECTID FIX --------
+def convert_objectid(data):
+
+    if isinstance(data, ObjectId):
+        return str(data)
+
+    if isinstance(data, list):
+        return [convert_objectid(i) for i in data]
+
+    if isinstance(data, dict):
+        return {k: convert_objectid(v) for k, v in data.items()}
+
+    return data
+
+
+# -------- FULL DATABASE BACKUP --------
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = update.effective_message
@@ -36,7 +53,9 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cursor = db.db[col].find({})
 
             async for doc in cursor:
-                doc["_id"] = str(doc["_id"])
+
+                doc = convert_objectid(doc)
+
                 data[col].append(doc)
 
             stats[col] = len(data[col])
@@ -66,6 +85,7 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(f"Backup error:\n{e}")
 
 
+# -------- RESTORE DATABASE --------
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = update.effective_message
