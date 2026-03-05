@@ -8,12 +8,14 @@ from telegram.ext import (
     PollAnswerHandler,
     ConversationHandler,
     MessageHandler,
-    filters
+    filters,
+    ChatMemberHandler
 )
 
 from bot.config import BOT_TOKEN
 from bot.database.db import connect_db, close_db
 from bot.scheduler import start_scheduler
+from bot.database.models import add_group
 
 from bot.handlers.start import start, help_callback
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
@@ -57,6 +59,15 @@ async def unmatched_callback(update: Update, context):
     await update.callback_query.answer(
         "This button is not available. Use /start again."
     )
+
+
+# -------- AUTO GROUP SAVE --------
+async def track_groups(update: Update, context):
+
+    chat = update.effective_chat
+
+    if chat and chat.type in ["group", "supergroup"]:
+        await add_group(chat.id)
 
 
 def main():
@@ -156,6 +167,11 @@ def main():
     )
 
     application.add_handler(conv_handler)
+
+    # -------- AUTO GROUP TRACK --------
+    application.add_handler(
+        ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
+    )
 
     application.add_handler(
         CallbackQueryHandler(unmatched_callback)
