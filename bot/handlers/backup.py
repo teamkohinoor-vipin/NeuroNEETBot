@@ -6,69 +6,78 @@ from bot.database.db import db
 from bot.config import ADMIN_ID
 
 
-# -------- FULL DATABASE BACKUP --------
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    message = update.effective_message
+
     if update.effective_user.id != ADMIN_ID:
+        await message.reply_text("❌ Admin only command")
         return
 
-    data = {}
+    try:
 
-    collections = [
-        "questions",
-        "users",
-        "groups",
-        "answers",
-        "poll_logs",
-        "pending_batches"
-    ]
+        data = {}
 
-    stats = {}
+        collections = [
+            "questions",
+            "users",
+            "groups",
+            "answers",
+            "poll_logs",
+            "pending_batches"
+        ]
 
-    for col in collections:
+        stats = {}
 
-        data[col] = []
+        for col in collections:
 
-        cursor = db.db[col].find({})
+            data[col] = []
 
-        async for doc in cursor:
-            doc["_id"] = str(doc["_id"])
-            data[col].append(doc)
+            cursor = db.db[col].find({})
 
-        stats[col] = len(data[col])
+            async for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                data[col].append(doc)
 
-    backup_json = json.dumps(data, indent=2)
+            stats[col] = len(data[col])
 
-    file = io.BytesIO(backup_json.encode())
-    file.name = "neuroneetbot_backup.json"
+        backup_json = json.dumps(data, indent=2)
 
-    caption = (
-        "📦 *Database Backup Created*\n\n"
-        f"🧠 Questions : {stats['questions']}\n"
-        f"👥 Users : {stats['users']}\n"
-        f"📢 Groups : {stats['groups']}\n"
-        f"📝 Answers : {stats['answers']}\n"
-        f"📊 Poll Logs : {stats['poll_logs']}\n"
-        f"⏳ Pending Batches : {stats['pending_batches']}"
-    )
+        file = io.BytesIO(backup_json.encode())
+        file.name = "neuroneetbot_backup.json"
 
-    await update.message.reply_document(
-        document=file,
-        caption=caption,
-        parse_mode="Markdown"
-    )
+        caption = (
+            "📦 Database Backup\n\n"
+            f"🧠 Questions : {stats['questions']}\n"
+            f"👥 Users : {stats['users']}\n"
+            f"📢 Groups : {stats['groups']}\n"
+            f"📝 Answers : {stats['answers']}\n"
+            f"📊 Poll Logs : {stats['poll_logs']}\n"
+            f"⏳ Pending Batches : {stats['pending_batches']}"
+        )
+
+        await message.reply_document(
+            document=file,
+            caption=caption
+        )
+
+    except Exception as e:
+
+        await message.reply_text(f"Backup error:\n{e}")
 
 
-# -------- RESTORE DATABASE --------
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    message = update.effective_message
+
     if update.effective_user.id != ADMIN_ID:
+        await message.reply_text("❌ Admin only command")
         return
 
-    document = update.message.document
+    document = message.document
 
     if not document:
-        await update.message.reply_text("Send backup JSON file.")
+        await message.reply_text("Send backup JSON file.")
         return
 
     file = await document.get_file()
@@ -89,6 +98,6 @@ async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             total += 1
 
-    await update.message.reply_text(
+    await message.reply_text(
         f"✅ Restore complete\n\n{total} records inserted."
     )
