@@ -168,9 +168,14 @@ def main():
 
     application.add_handler(conv_handler)
 
-    # -------- AUTO GROUP TRACK --------
+    # -------- AUTO GROUP TRACK (bot added) --------
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
+    )
+
+    # -------- AUTO GROUP TRACK (any message in group) --------
+    application.add_handler(
+        MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
 
     application.add_handler(
