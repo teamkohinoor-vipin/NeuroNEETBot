@@ -17,8 +17,8 @@ TEMP_CHAPTER = "temp_chapter"
 # ---------- NORMALIZE QUESTION ----------
 def normalize_question(text):
     text = text.lower()
-    text = re.sub(r"[^\w\s]", "", text)   # punctuation हटाए
-    text = re.sub(r"\s+", " ", text)      # extra spaces हटाए
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text)
     return text.strip()
 # ---------------------------------------
 
@@ -29,7 +29,9 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if update.effective_chat.type != "private":
         if update.message:
-            await update.message.reply_text("This command is only available in private chat.")
+            await update.message.reply_text(
+                "This command is only available in private chat."
+            )
         return ConversationHandler.END
 
     keyboard = [
@@ -88,16 +90,10 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     subject = context.user_data[TEMP_SUBJECT]
 
-    try:
-        await query.edit_message_text(
-            "🎯Please Select Chapter Name:",
-            reply_markup=chapter_menu(subject, class_, 0)
-        )
-    except:
-        await query.message.reply_text(
-            "🎯Please Select Chapter Name:",
-            reply_markup=chapter_menu(subject, class_, 0)
-        )
+    await query.edit_message_text(
+        "🎯Please Select Chapter Name:",
+        reply_markup=chapter_menu(subject, class_, 0)
+    )
 
     return CHAPTER
 
@@ -189,7 +185,6 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return QUESTION
     # ------------------------------------------
 
-
     question_data = {
         "subject": context.user_data[TEMP_SUBJECT],
         "class": context.user_data[TEMP_CLASS],
@@ -237,8 +232,7 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         f"Subject: {batch['subject']}\n"
         f"Class: {batch['class']}\n"
         f"Chapter: {batch['chapter']}\n"
-        f"Total questions: {len(batch['questions'])}\n\n"
-        "Use buttons to review."
+        f"Total questions: {len(batch['questions'])}"
     )
 
     await context.bot.send_message(
@@ -252,8 +246,7 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     await query.edit_message_text(
-        "📨 *Your question has been sent for admin review.*\n\nAfter approval it will be added to quiz system.",
-        parse_mode="Markdown"
+        "📨 Your question has been sent for admin review.\nAfter approval it will be added to quiz system."
     )
 
     context.user_data.clear()
