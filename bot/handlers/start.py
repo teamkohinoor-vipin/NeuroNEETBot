@@ -121,6 +121,11 @@ View bot statistics.
 /adminpanel  
 Open admin control panel.
 
+/backup
+Download Database backup file.
+
+/restore 
+Restore all data by sending backup file.
 ━━━━━━━━━━━━━━━━
 
 ⚙️ *Quiz System*
