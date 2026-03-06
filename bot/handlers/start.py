@@ -25,7 +25,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"🧪 *Welcome {user} to NEET Quiz Bot!* 🧪\n\n"
 
-        "I send automatic NEET quizzes every 20 minutes.\n\n"
+        "I can send automatic NEET quizzes every 20 minutes.\n\n"
 
         "🌅 *6:00 AM – 12:00 PM* → Physics ⚛️\n"
         "☀️ *12:00 PM – 6:00 PM* → Chemistry 🧪\n"
@@ -36,7 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Correct → +1 point\n"
         "❌ Wrong → -1 point\n\n"
 
-        "🏆 Use `/leaderboard` in group to see rankings.\n\n"
+        "🎯Just add me in your group and make me Admin.\n\n"
 
         "👇 Use the buttons below:"
     )
