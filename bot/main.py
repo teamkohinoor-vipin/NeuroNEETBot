@@ -1,6 +1,6 @@
 import logging
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup  # 👈 NEW import
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -12,10 +12,10 @@ from telegram.ext import (
     ChatMemberHandler
 )
 
-from bot.config import BOT_TOKEN
+from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME  # 👈 NEW import
 from bot.database.db import connect_db, close_db
 from bot.scheduler import start_scheduler
-from bot.database.models import add_group
+from bot.database.models import add_group, get_config  # 👈 NEW import
 
 from bot.handlers.start import start, help_callback
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
@@ -46,7 +46,7 @@ from bot.handlers.broadcast import broadcast
 # ✅ BACKUP IMPORT
 from bot.handlers.backup import backup, restore
 
-# 👇 NEW: Admin panel import
+# Admin panel import
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
 
@@ -74,6 +74,72 @@ async def track_groups(update: Update, context):
 
     if chat and chat.type in ["group", "supergroup"]:
         await add_group(chat.id)
+
+
+# 👇 NEW: Back to main menu handler
+async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle back button from help menu – shows the main start menu again."""
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user.first_name
+    chat_type = query.message.chat.type
+
+    # Check question submission status
+    question_enabled = await get_config("question_add_enabled", True)
+
+    # Build start message text
+    text = (
+        f"🧪 *Welcome {user} to NEET Quiz Bot!* 🧪\n\n"
+        "I can send automatic NEET quizzes every 20 minutes.\n\n"
+        "🌅 *6:00 AM – 12:00 PM* → Physics ⚛️\n"
+        "☀️ *12:00 PM – 6:00 PM* → Chemistry 🧪\n"
+        "🌙 *6:00 PM – 12:00 AM* → Biology 🧬\n"
+        "😴 *12:00 AM – 6:00 AM* → Sleep Mode\n\n"
+        "📊 *Scoring System*\n"
+        "✅ Correct → +1 point\n"
+        "❌ Wrong → -1 point\n\n"
+        "🎯 Just add me in your group and make me Admin.\n\n"
+        "👇 *Use the buttons below:*"
+    )
+
+    # Add to Group button
+    add_group_button = InlineKeyboardButton(
+        "📢 Add Bot to Group",
+        url=f"https://t.me/{context.bot.username}?startgroup=true"
+    )
+
+    if chat_type == "private":
+        keyboard_buttons = [
+            [InlineKeyboardButton("❓ Help", callback_data="help")],
+        ]
+        if question_enabled:
+            keyboard_buttons.append([InlineKeyboardButton("➕ Add Question", callback_data="add_question")])
+        keyboard_buttons.extend([
+            [add_group_button],
+            [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
+            [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
+        ])
+        keyboard = keyboard_buttons
+    else:
+        bot_username = context.bot.username
+        keyboard = [
+            [InlineKeyboardButton("❓ Help", callback_data="help")],
+            [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
+        ]
+        if question_enabled:
+            keyboard.append([InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")])
+        keyboard.extend([
+            [add_group_button],
+            [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
+            [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
+        ])
+
+    await query.edit_message_text(
+        text,
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 def main():
@@ -120,9 +186,8 @@ def main():
         PollAnswerHandler(poll_answer)
     )
 
-    # 👇 NEW: Admin panel command and callbacks
+    # 👇 Admin panel command and callbacks
     application.add_handler(CommandHandler("adminpanel", admin_panel))
-    # This must be placed BEFORE the general admin_callback to avoid conflict
     application.add_handler(
         CallbackQueryHandler(admin_panel_callback, pattern="^admin_(toggle|panel|close)")
     )
@@ -130,6 +195,11 @@ def main():
     # Existing admin callback for batch review
     application.add_handler(
         CallbackQueryHandler(admin_callback, pattern="^admin_")
+    )
+
+    # 👇 NEW: Back to main menu callback
+    application.add_handler(
+        CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
     conv_handler = ConversationHandler(
