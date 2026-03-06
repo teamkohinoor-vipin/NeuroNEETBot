@@ -22,10 +22,10 @@ def normalize_question(text):
 
     text = text.lower()
 
-    # remove punctuation
+    # punctuation remove
     text = re.sub(r"[^\w\s]", " ", text)
 
-    # remove extra spaces
+    # extra spaces remove
     text = re.sub(r"\s+", " ", text)
 
     return text.strip()
