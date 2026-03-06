@@ -46,6 +46,9 @@ from bot.handlers.broadcast import broadcast
 # ✅ BACKUP IMPORT
 from bot.handlers.backup import backup, restore
 
+# 👇 NEW: Admin panel import
+from bot.handlers.admin_panel import admin_panel, admin_panel_callback
+
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -117,6 +120,14 @@ def main():
         PollAnswerHandler(poll_answer)
     )
 
+    # 👇 NEW: Admin panel command and callbacks
+    application.add_handler(CommandHandler("adminpanel", admin_panel))
+    # This must be placed BEFORE the general admin_callback to avoid conflict
+    application.add_handler(
+        CallbackQueryHandler(admin_panel_callback, pattern="^admin_(toggle|panel|close)")
+    )
+
+    # Existing admin callback for batch review
     application.add_handler(
         CallbackQueryHandler(admin_callback, pattern="^admin_")
     )
