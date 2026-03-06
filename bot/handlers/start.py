@@ -56,7 +56,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
-            [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_daily")],
+
+            # FIXED leaderboard button
+            [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
+
             [InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
