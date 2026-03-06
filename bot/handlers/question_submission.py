@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from bot.database.models import create_pending_batch, add_question_to_batch, get_pending_batch, question_exists
+from bot.database.models import create_pending_batch, add_question_to_batch, get_pending_batch
 from bot.utils.validators import validate_question
 from bot.config import ADMIN_ID, CHAPTERS, chapter_menu
 from bson import ObjectId
@@ -167,23 +167,11 @@ async def receive_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return QUESTION
 
-    # ---------- DUPLICATE QUESTION CHECK ----------
-    question_text = result["question"].strip().lower()
-
-    exists = await question_exists(question_text)
-
-    if exists:
-        await update.message.reply_text(
-            "❌ This question already someone uploaded.\nPlease send other question."
-        )
-        return QUESTION
-    # ---------------------------------------------
-
     question_data = {
         "subject": context.user_data[TEMP_SUBJECT],
         "class": context.user_data[TEMP_CLASS],
         "chapter": context.user_data[TEMP_CHAPTER],
-        "question": question_text,
+        "question": result["question"],
         "options": result["options"],
         "correct_index": result["correct_index"],
         "year": result.get("year"),
