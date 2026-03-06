@@ -20,11 +20,10 @@ last_polls = {}
 
 def get_current_subject():
 
-    now = datetime.now(timezone(TIMEZONE))
-    hour = now.hour
+    now = datetime.now(timezone(TIMEZONE)).hour
 
     for block in SCHEDULE:
-        if block["start"] <= hour < block["end"]:
+        if block["start"] <= now < block["end"]:
             return block["subject"]
 
     return None
@@ -48,17 +47,15 @@ async def send_quiz(bot: Bot):
 
         try:
 
-            # each group gets different question
             question = await get_random_question(subject)
 
             if not question:
                 logger.warning(f"No question found for {subject}")
-                continue
+                continue   # 🔥 FIXED
 
             options = question["options"]
             correct_option_id = question["correct_index"]
 
-            # delete previous poll
             if chat_id in last_polls:
                 try:
                     await bot.delete_message(chat_id, last_polls[chat_id])
