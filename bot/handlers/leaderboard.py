@@ -84,12 +84,14 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
             user_id = user.get("_id")
 
-            # FIX: real name from database
-            first_name = user.get("username") or "User"
+            try:
+                member = await context.bot.get_chat_member(chat_id, user_id)
+                first_name = member.user.first_name
+            except:
+                first_name = "User"
 
             points = user.get("points", 0)
 
-            # clickable name
             name = f"[{first_name}](tg://user?id={user_id})"
 
             if i == 1:
