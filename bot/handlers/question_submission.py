@@ -17,6 +17,13 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data.clear()
 
+    # 👇 NEW: Check if question submission is enabled
+    from bot.database.models import get_config
+    enabled = await get_config("question_add_enabled", True)
+    if not enabled:
+        await update.effective_message.reply_text("❌ Question submission is currently disabled by admin.")
+        return ConversationHandler.END
+
     if update.effective_chat.type != "private":
         if update.message:
             await update.message.reply_text("This command is only available in private chat.")
