@@ -22,30 +22,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         upsert=True
     )
 
-    # ✨ Custom welcome message with user's name
+    # Welcome message
     text = (
         f"🧪 *Welcome {user} to NEET Quiz Bot!* 🧪\n\n"
-        
         "I can send automatic NEET quizzes every 20 minutes.\n\n"
-        
         "🌅 *6:00 AM – 12:00 PM* → Physics ⚛️\n"
         "☀️ *12:00 PM – 6:00 PM* → Chemistry 🧪\n"
         "🌙 *6:00 PM – 12:00 AM* → Biology 🧬\n"
         "😴 *12:00 AM – 6:00 AM* → Sleep Mode\n\n"
-        
         "📊 *Scoring System*\n"
         "✅ Correct → +1 point\n"
         "❌ Wrong → -1 point\n\n"
-        
         "🎯 Just add me in your group and make me Admin.\n\n"
-        
         "👇 *Use the buttons below:*"
     )
 
-    # 👇 Check if question submission is enabled
+    # Check if question submission is enabled
     question_enabled = await get_config("question_add_enabled", True)
 
-    # 👇 Add Group Button (always show)
+    # Add Group Button (always show)
     add_group_button = InlineKeyboardButton(
         "📢 Add Bot to Group",
         url=f"https://t.me/{context.bot.username}?startgroup=true"
@@ -152,8 +147,16 @@ Good luck with your preparation! 🚀
     back_button = [[InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]]
     reply_markup = InlineKeyboardMarkup(back_button)
 
-    await query.edit_message_text(
-        help_text,
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
+    try:
+        await query.edit_message_text(
+            help_text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        # In case edit fails (e.g., message too old or no changes), send as new message
+        await query.message.reply_text(
+            help_text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
