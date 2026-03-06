@@ -23,8 +23,7 @@ def leaderboard_keyboard():
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
-        "📕 Click the below button to check leaderboard\n\n"
-        "Leaderboard data not yet available."
+        "📕 Click the below button to check leaderboard."
     )
 
     await update.message.reply_text(
