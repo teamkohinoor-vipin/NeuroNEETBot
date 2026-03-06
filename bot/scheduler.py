@@ -16,9 +16,18 @@ TEMP_CHAPTER = "temp_chapter"
 
 # ---------- NORMALIZE QUESTION ----------
 def normalize_question(text):
+
+    if not text:
+        return ""
+
     text = text.lower()
-    text = re.sub(r"[^\w\s]", "", text)
+
+    # remove punctuation
+    text = re.sub(r"[^\w\s]", " ", text)
+
+    # remove extra spaces
     text = re.sub(r"\s+", " ", text)
+
     return text.strip()
 # ---------------------------------------
 
