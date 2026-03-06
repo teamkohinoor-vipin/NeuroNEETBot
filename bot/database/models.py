@@ -81,6 +81,12 @@ async def get_random_question(subject: str):
     return questions[0] if questions else None
 
 
+# ---------- NEW: Duplicate Question Check ----------
+async def question_exists(question_text: str):
+
+    return await db.db.questions.find_one({"question": question_text})
+
+
 # ---------- Pending Batches ----------
 async def create_pending_batch(user_id: int, subject: str, class_: int, chapter: str):
 
