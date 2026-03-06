@@ -2,7 +2,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from datetime import datetime, timedelta
 from bot.database.models import get_top_users
-from bot.utils.decorators import group_only
 
 
 def leaderboard_keyboard():
@@ -20,7 +19,7 @@ def leaderboard_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 
-# command leaderboard
+# /leaderboard command
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "📕 Click the below button to check leaderboard."
@@ -31,7 +30,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# NEW: start button leaderboard
+# START button leaderboard menu
 async def leaderboard_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -51,7 +50,6 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
 
     chat_id = query.message.chat.id
-
     period = query.data.split("_")[1]
 
     now = datetime.utcnow()
@@ -71,11 +69,12 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         since = datetime(now.year, now.month, 1)
         title = "📆 Monthly Leaderboard"
 
+
     users = await get_top_users(chat_id=chat_id, limit=10, since=since)
 
     if not users:
 
-        text = "Data is not available right now."
+        text = "Leaderboard data not available right now."
 
     else:
 
@@ -83,20 +82,23 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         for i, user in enumerate(users, 1):
 
-            username = user.get("username")
+            name = user.get("username", "User")
+            user_id = user.get("_id")
+
             points = user.get("points", 0)
 
-            if username:
-                name = f"[{username}](https://t.me/{username})"
-            else:
-                name = "Anonymous"
+            # permanent clickable name
+            name = f"[{name}](tg://user?id={user_id})"
 
             if i == 1:
                 rank = "🥇"
+
             elif i == 2:
                 rank = "🥈"
+
             elif i == 3:
                 rank = "🥉"
+
             else:
                 rank = f"{i}."
 
