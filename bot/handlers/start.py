@@ -24,7 +24,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Welcome message
     text = (
-        f"🧪 *Welcome {user} to NEET Quiz Bot!* 🧪\n\n"
+        f"🧪 *Welcome {user} to NeuroNEETBot!* 🧪\n\n"
         "I can send automatic NEET quizzes every 20 minutes.\n\n"
         "🌅 *6:00 AM – 12:00 PM* → Physics ⚛️\n"
         "☀️ *12:00 PM – 6:00 PM* → Chemistry 🧪\n"
@@ -85,7 +85,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     help_text = """
-📖 *NEET QUIZ BOT – HELP GUIDE*
+📖 *NeuroNEETBot – HELP GUIDE*
 
 This bot provides automated NEET quiz practice in Telegram groups.
 
