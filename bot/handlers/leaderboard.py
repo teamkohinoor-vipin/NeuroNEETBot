@@ -84,12 +84,12 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
             user_id = user.get("_id")
 
-            # show first name
-            first_name = user.get("first_name") or "User"
+            # FIX: real name from database
+            first_name = user.get("username") or "User"
 
             points = user.get("points", 0)
 
-            # clickable first name
+            # clickable name
             name = f"[{first_name}](tg://user?id={user_id})"
 
             if i == 1:
