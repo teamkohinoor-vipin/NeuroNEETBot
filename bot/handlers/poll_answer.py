@@ -1,110 +1,82 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes
-from datetime import datetime, timedelta
-from bot.database.models import get_top_users
-from bot.utils.decorators import group_only
+from bot.database.models import (
+    get_poll_log,
+    get_question_by_poll,
+    update_user_stats,
+    record_answer,
+    get_user
+)
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-def leaderboard_keyboard():
+async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    keyboard = [
-        [
-            InlineKeyboardButton("📅 Daily", callback_data="leaderboard_daily"),
-            InlineKeyboardButton("📊 Weekly", callback_data="leaderboard_weekly")
-        ],
-        [
-            InlineKeyboardButton("📆 Monthly", callback_data="leaderboard_monthly")
-        ]
-    ]
+    answer = update.poll_answer
+    user = answer.user
+    poll_id = answer.poll_id
 
-    return InlineKeyboardMarkup(keyboard)
+    # safe option handling
+    if not answer.option_ids:
+        return
 
+    selected_option = answer.option_ids[0]
 
-async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    poll_log = await get_poll_log(poll_id)
 
-    text = (
-        "📕 Click the below button to check leaderboard\n\n"
-        "Leaderboard data not yet available."
+    if not poll_log:
+        logger.warning(f"Poll {poll_id} not found in logs")
+        return
+
+    chat_id = poll_log["chat_id"]
+
+    question = await get_question_by_poll(poll_id)
+
+    if not question:
+        return
+
+    correct_index = question["correct_index"]
+
+    is_correct = selected_option == correct_index
+
+    points_change = 1 if is_correct else -1
+
+    # update user stats
+    await update_user_stats(
+        user_id=user.id,
+        username=user.username or user.first_name,
+        correct=is_correct,
+        chapter=question["chapter"]
     )
 
-    await update.message.reply_text(
-        text,
-        reply_markup=leaderboard_keyboard()
+    # leaderboard ke liye answer record
+    await record_answer(
+        user.id,
+        user.username or user.first_name,
+        question["_id"],
+        points_change,
+        chat_id
     )
 
+    user_data = await get_user(user.id)
 
-async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    total_points = user_data.get("total_points", 0)
 
-    query = update.callback_query
-
-    await query.answer()
-
-    chat_id = query.message.chat.id
-
-    period = query.data.split("_")[1]
-
-    now = datetime.utcnow()
-
-    if period == "daily":
-
-        since = datetime(now.year, now.month, now.day)
-
-        title = "📅 Daily Leaderboard"
-
-    elif period == "weekly":
-
-        since = now - timedelta(days=now.weekday())
-
-        title = "📊 Weekly Leaderboard"
-
+    # mention system
+    if user.username:
+        mention = f"@{user.username}"
     else:
+        mention = f"<a href='tg://user?id={user.id}'>{user.first_name}</a>"
 
-        since = datetime(now.year, now.month, 1)
+    emoji = "✅" if is_correct else "❌"
 
-        title = "📆 Monthly Leaderboard"
+    text = f"{mention} {emoji} {points_change:+d} | Total: {total_points}"
 
-    users = await get_top_users(chat_id=chat_id, limit=10, since=since)
-
-    if not users:
-
-        text = "Data is not available right now."
-
-    else:
-
-        lines = [f"{title}\n"]
-
-        for i, user in enumerate(users, 1):
-
-            username = user.get("username")
-
-            points = user.get("points", 0)
-
-            if username:
-
-                name = f"[{username}](https://t.me/{username})"
-
-            else:
-
-                name = "Anonymous"
-
-            if i == 1:
-                rank = "🥇"
-
-            elif i == 2:
-                rank = "🥈"
-
-            elif i == 3:
-                rank = "🥉"
-
-            else:
-                rank = f"{i}."
-
-            lines.append(f"{rank} {name} — {points} pts")
-
-        text = "\n".join(lines)
-
-    await query.edit_message_text(
-        text,
-        parse_mode="Markdown",
-        reply_markup=leaderboard_keyboard()
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode="HTML"
     )
