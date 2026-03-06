@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from bot.config import SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import db
-from bot.database.models import get_config   # 👈 NEW IMPORT
+from bot.database.models import get_config   # 👈 IMPORT
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -44,14 +44,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 👇 Check if question submission is enabled
     question_enabled = await get_config("question_add_enabled", True)
 
+    # 👇 Add Group Button (always show)
+    add_group_button = InlineKeyboardButton(
+        "📢 Add Bot to Group",
+        url=f"https://t.me/{context.bot.username}?startgroup=true"
+    )
+
     if chat_type == "private":
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
         ]
         if question_enabled:
             keyboard_buttons.append([InlineKeyboardButton("➕ Add Question", callback_data="add_question")])
-        # If disabled, button is simply not shown
         keyboard_buttons.extend([
+            [add_group_button],   # 👈 ADDED: Add to Group button
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
         ])
@@ -65,6 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if question_enabled:
             keyboard.append([InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")])
         keyboard.extend([
+            [add_group_button],   # 👈 ADDED: Add to Group button
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
         ])
