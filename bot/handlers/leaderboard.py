@@ -82,13 +82,15 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         for i, user in enumerate(users, 1):
 
-            name = user.get("username", "User")
             user_id = user.get("_id")
+
+            # show first name
+            first_name = user.get("first_name") or "User"
 
             points = user.get("points", 0)
 
-            # permanent clickable name
-            name = f"[{name}](tg://user?id={user_id})"
+            # clickable first name
+            name = f"[{first_name}](tg://user?id={user_id})"
 
             if i == 1:
                 rank = "🥇"
