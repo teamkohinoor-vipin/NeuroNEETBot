@@ -8,7 +8,7 @@ import logging
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES, SCHEDULE
 from bot.database.models import get_random_question, log_poll, get_all_groups
 
-# ✅ backup import
+# backup import
 from bot.handlers.backup import backup
 
 logger = logging.getLogger(__name__)
@@ -20,10 +20,11 @@ last_polls = {}
 
 def get_current_subject():
 
-    now = datetime.now(timezone(TIMEZONE)).hour
+    now = datetime.now(timezone(TIMEZONE))
+    hour = now.hour
 
     for block in SCHEDULE:
-        if block["start"] <= now < block["end"]:
+        if block["start"] <= hour < block["end"]:
             return block["subject"]
 
     return None
@@ -39,20 +40,25 @@ async def send_quiz(bot: Bot):
 
     groups = await get_all_groups()
 
+    if not groups:
+        logger.warning("No groups found")
+        return
+
     for chat_id in groups:
 
         try:
 
-            # each group gets a different question
+            # each group gets different question
             question = await get_random_question(subject)
 
             if not question:
                 logger.warning(f"No question found for {subject}")
-                continue   # ✅ FIXED (return हटाकर continue)
+                continue
 
             options = question["options"]
             correct_option_id = question["correct_index"]
 
+            # delete previous poll
             if chat_id in last_polls:
                 try:
                     await bot.delete_message(chat_id, last_polls[chat_id])
@@ -94,7 +100,6 @@ async def start_scheduler(bot: Bot):
         replace_existing=True
     )
 
-    # daily backup job
     scheduler.add_job(
         backup,
         trigger=IntervalTrigger(hours=24),
