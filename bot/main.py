@@ -1,6 +1,6 @@
 import logging
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup  # 👈 NEW import
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -9,13 +9,14 @@ from telegram.ext import (
     ConversationHandler,
     MessageHandler,
     filters,
-    ChatMemberHandler
+    ChatMemberHandler,
+    ContextTypes      # 👈 IMPORTANT – missing import added
 )
 
-from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME  # 👈 NEW import
+from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import connect_db, close_db
 from bot.scheduler import start_scheduler
-from bot.database.models import add_group, get_config  # 👈 NEW import
+from bot.database.models import add_group, get_config
 
 from bot.handlers.start import start, help_callback
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
@@ -76,7 +77,7 @@ async def track_groups(update: Update, context):
         await add_group(chat.id)
 
 
-# 👇 NEW: Back to main menu handler
+# 👇 Back to main menu handler
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle back button from help menu – shows the main start menu again."""
     query = update.callback_query
@@ -197,7 +198,7 @@ def main():
         CallbackQueryHandler(admin_callback, pattern="^admin_")
     )
 
-    # 👇 NEW: Back to main menu callback
+    # 👇 Back to main menu callback
     application.add_handler(
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
