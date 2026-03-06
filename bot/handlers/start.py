@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from bot.config import SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import db
-
+from bot.database.models import get_config   # 👈 NEW IMPORT
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -41,29 +41,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👇 Use the buttons below:"
     )
 
+    # 👇 Check if question submission is enabled
+    question_enabled = await get_config("question_add_enabled", True)
+
     if chat_type == "private":
-
-        keyboard = [
+        keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
-            [InlineKeyboardButton("➕ Add Question", callback_data="add_question")],
+        ]
+        if question_enabled:
+            keyboard_buttons.append([InlineKeyboardButton("➕ Add Question", callback_data="add_question")])
+        # If disabled, button is simply not shown
+        keyboard_buttons.extend([
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
-        ]
-
+        ])
+        keyboard = keyboard_buttons
     else:
-
         bot_username = context.bot.username
-
         keyboard = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
-
-            # leaderboard menu open karega
             [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
-
-            [InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")],
+        ]
+        if question_enabled:
+            keyboard.append([InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")])
+        keyboard.extend([
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
-        ]
+        ])
 
     await update.message.reply_text(
         text,
