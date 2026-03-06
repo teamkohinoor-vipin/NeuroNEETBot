@@ -36,20 +36,21 @@ async def send_quiz(bot: Bot):
         logger.info("😴 Sleep mode active")
         return
 
-    question = await get_random_question(subject)
-
-    if not question:
-        logger.warning(f"No question found for {subject}")
-        return
-
-    options = question["options"]
-    correct_option_id = question["correct_index"]
-
     groups = await get_all_groups()
 
     for chat_id in groups:
 
         try:
+
+            # ✅ each group gets a different question
+            question = await get_random_question(subject)
+
+            if not question:
+                logger.warning(f"No question found for {subject}")
+                return
+
+            options = question["options"]
+            correct_option_id = question["correct_index"]
 
             if chat_id in last_polls:
                 try:
