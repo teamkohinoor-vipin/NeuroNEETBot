@@ -57,7 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
 
-            # FIXED leaderboard button
+            # leaderboard menu open karega
             [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
 
             [InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")],
@@ -94,4 +94,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Questions can be added in private chat."
     )
 
-    await query.edit_message_text(text, parse_mode="Markdown")
+    await query.edit_message_text(
+        text,
+        parse_mode="Markdown"
+    )
