@@ -1,6 +1,16 @@
 from datetime import datetime
 from bot.database.db import db
 from bson import ObjectId
+import re
+
+
+# ---------- NORMALIZE QUESTION ----------
+def normalize_question(text: str):
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+# ---------------------------------------
 
 
 # ---------- Users ----------
@@ -81,10 +91,21 @@ async def get_random_question(subject: str):
     return questions[0] if questions else None
 
 
-# ---------- NEW: Duplicate Question Check ----------
+# ---------- SMART Duplicate Question Check ----------
 async def question_exists(question_text: str):
 
-    return await db.db.questions.find_one({"question": question_text})
+    normalized = normalize_question(question_text)
+
+    cursor = db.db.questions.find({}, {"question": 1})
+
+    async for q in cursor:
+
+        existing = normalize_question(q["question"])
+
+        if existing == normalized:
+            return True
+
+    return False
 
 
 # ---------- Pending Batches ----------
