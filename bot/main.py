@@ -18,7 +18,10 @@ from bot.scheduler import start_scheduler
 from bot.database.models import add_group
 
 from bot.handlers.start import start, help_callback
-from bot.handlers.leaderboard import leaderboard, leaderboard_callback
+
+# ✅ FIXED IMPORT
+from bot.handlers.leaderboard import leaderboard, leaderboard_callback, leaderboard_menu
+
 from bot.handlers.poll_answer import poll_answer
 
 from bot.handlers.question_submission import (
@@ -43,7 +46,7 @@ from bot.handlers.error import error_handler
 from bot.handlers.admin_stats import stats
 from bot.handlers.broadcast import broadcast
 
-# ✅ BACKUP IMPORT
+# BACKUP
 from bot.handlers.backup import backup, restore
 
 
@@ -92,11 +95,10 @@ def main():
 
     application.add_handler(CommandHandler("broadcast", broadcast))
 
-    # ✅ BACKUP COMMANDS
+    # -------- BACKUP --------
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
 
-    # ✅ restore file accept handler (added)
     application.add_handler(
         MessageHandler(filters.Document.ALL, restore)
     )
@@ -105,14 +107,21 @@ def main():
         CallbackQueryHandler(help_callback, pattern="^help$")
     )
 
+    # -------- LEADERBOARD --------
     application.add_handler(
         CommandHandler("leaderboard", leaderboard)
+    )
+
+    # start button leaderboard menu
+    application.add_handler(
+        CallbackQueryHandler(leaderboard_menu, pattern="^leaderboard_menu$")
     )
 
     application.add_handler(
         CallbackQueryHandler(leaderboard_callback, pattern="^leaderboard_")
     )
 
+    # -------- POLL ANSWER --------
     application.add_handler(
         PollAnswerHandler(poll_answer)
     )
@@ -180,12 +189,11 @@ def main():
 
     application.add_handler(conv_handler)
 
-    # -------- AUTO GROUP TRACK (bot added) --------
+    # -------- AUTO GROUP TRACK --------
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
-    # -------- AUTO GROUP TRACK (any message in group) --------
     application.add_handler(
         MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
