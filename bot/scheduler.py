@@ -17,6 +17,7 @@ scheduler = AsyncIOScheduler(timezone=timezone(TIMEZONE))
 
 last_polls = {}
 
+
 def get_current_subject():
 
     now = datetime.now(timezone(TIMEZONE)).hour
@@ -42,12 +43,12 @@ async def send_quiz(bot: Bot):
 
         try:
 
-            # ✅ each group gets a different question
+            # each group gets a different question
             question = await get_random_question(subject)
 
             if not question:
                 logger.warning(f"No question found for {subject}")
-                return
+                continue   # ✅ FIXED (return हटाकर continue)
 
             options = question["options"]
             correct_option_id = question["correct_index"]
@@ -93,7 +94,7 @@ async def start_scheduler(bot: Bot):
         replace_existing=True
     )
 
-    # ✅ daily backup job
+    # daily backup job
     scheduler.add_job(
         backup,
         trigger=IntervalTrigger(hours=24),
