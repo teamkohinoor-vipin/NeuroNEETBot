@@ -12,7 +12,7 @@ DEVELOPER_USERNAME = os.getenv("DEVELOPER_USERNAME", "")
 GROUP_ID = int(os.getenv("GROUP_ID", 0))
 
 TIMEZONE = "Asia/Kolkata"
-QUIZ_INTERVAL_MINUTES = 1
+QUIZ_INTERVAL_MINUTES = 5
 
 SCHEDULE = [
     {"subject": "Physics", "start": 6, "end": 12},
