@@ -4,8 +4,9 @@ from pytz import timezone
 from datetime import datetime
 from telegram import Bot, Poll
 import logging
+import random
 
-from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES, SCHEDULE
+from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES
 from bot.database.models import get_random_question, log_poll, get_all_groups
 
 # backup import
@@ -17,25 +18,11 @@ scheduler = AsyncIOScheduler(timezone=timezone(TIMEZONE))
 
 last_polls = {}
 
-
-def get_current_subject():
-
-    now = datetime.now(timezone(TIMEZONE)).hour
-
-    for block in SCHEDULE:
-        if block["start"] <= now < block["end"]:
-            return block["subject"]
-
-    return None
+# PCB subjects
+SUBJECTS = ["Physics", "Chemistry", "Biology"]
 
 
 async def send_quiz(bot: Bot):
-
-    subject = get_current_subject()
-
-    if not subject:
-        logger.info("😴 Sleep mode active")
-        return
 
     groups = await get_all_groups()
 
@@ -43,17 +30,18 @@ async def send_quiz(bot: Bot):
 
         try:
 
-            # each group gets a random question
+            # random subject
+            subject = random.choice(SUBJECTS)
+
             question = await get_random_question(subject)
 
             if not question:
                 logger.warning(f"No question found for {subject}")
-                return
+                continue
 
             options = question["options"]
             correct_option_id = question["correct_index"]
 
-            # delete previous poll
             if chat_id in last_polls:
                 try:
                     await bot.delete_message(chat_id, last_polls[chat_id])
@@ -71,7 +59,7 @@ async def send_quiz(bot: Bot):
 
             last_polls[chat_id] = message.message_id
 
-            # ✅ FIX: message_id added
+            # FIXED log_poll
             await log_poll(
                 poll_id=message.poll.id,
                 message_id=message.message_id,
@@ -97,7 +85,7 @@ async def start_scheduler(bot: Bot):
         replace_existing=True
     )
 
-    # daily backup
+    # daily backup job
     scheduler.add_job(
         backup,
         trigger=IntervalTrigger(hours=24),
