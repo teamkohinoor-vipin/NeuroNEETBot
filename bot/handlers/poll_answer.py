@@ -5,6 +5,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# store score messages per group
+score_messages = {}
+
 async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
     user = answer.user
@@ -15,6 +18,7 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not poll_log:
         logger.warning(f"Poll {poll_id} not found in logs")
         return
+
     chat_id = poll_log["chat_id"]
     question_id = poll_log["question_id"]
 
@@ -34,7 +38,6 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chapter=question["chapter"]
     )
 
-    # ✅ FIX: chat_id added to record_answer
     await record_answer(
         user_id=user.id,
         username=user.username or user.first_name,
@@ -49,5 +52,11 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mention = f"@{user.username}" if user.username else user.first_name
     emoji = "✅" if is_correct else "❌"
     text = f"{mention} {emoji} {points_change:+d} | Total: {total_points}"
-    
-    await context.bot.send_message(chat_id=chat_id, text=text)
+
+    msg = await context.bot.send_message(chat_id=chat_id, text=text)
+
+    # store message id
+    if chat_id not in score_messages:
+        score_messages[chat_id] = []
+
+    score_messages[chat_id].append(msg.message_id)
