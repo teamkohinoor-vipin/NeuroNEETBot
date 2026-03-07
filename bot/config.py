@@ -159,7 +159,19 @@ CHAPTERS = {
 "🔘 Structural Organisation in Animals",
 "🔘 Cell: The Unit of Life",
 "🔘 Biomolecules",
-"🔘 Cell Cycle and Cell Division"
+"🔘 Cell Cycle and Cell Division",
+"🔘 Transport in Plants",
+"🔘 Mineral Nutrition",
+"🔘 Photosynthesis in Higher Plants",
+"🔘 Respiration in Plants",
+"🔘 Plant Growth and Development",
+"🔘 Digestion and Absorption",
+"🔘 Breathing and Exchange of Gases",
+"🔘 Body Fluids and Circulation",
+"🔘 Excretory Products and their Elimination",
+"🔘 Locomotion and Movement",
+"🔘 Neural Control and Coordination",
+"🔘 Chemical Coordination and Integration"
 ],
 
 12: [
@@ -167,9 +179,17 @@ CHAPTERS = {
 "🔘 Sexual Reproduction in Flowering Plants",
 "🔘 Human Reproduction",
 "🔘 Reproductive Health",
-"🔘 Principles of Inheritance and Variation"
+"🔘 Principles of Inheritance and Variation",
+"🔘 Molecular Basis of Inheritance",
+"🔘 Evolution",
+"🔘 Human Health and Disease",
+"🔘 Microbes in Human Welfare",
+"🔘 Biotechnology: Principles and Processes",
+"🔘 Biotechnology and its Applications",
+"🔘 Organisms and Populations",
+"🔘 Ecosystem",
+"🔘 Biodiversity and Conservation",
+"🔘 Environmental Issues"
 ]
-
-}
 
 }
