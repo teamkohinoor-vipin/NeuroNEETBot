@@ -20,6 +20,7 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     question = await get_question_by_poll(poll_id)
     if not question:
+        logger.warning(f"Question not found for poll {poll_id}")
         return
 
     correct_index = question["correct_index"]
@@ -32,7 +33,15 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         correct=is_correct,
         chapter=question["chapter"]
     )
-    await record_answer(user.id, user.username or user.first_name, question["_id"], points_change)
+
+    # ✅ FIX: chat_id added to record_answer
+    await record_answer(
+        user_id=user.id,
+        username=user.username or user.first_name,
+        question_id=question["_id"],
+        points_change=points_change,
+        chat_id=chat_id
+    )
 
     user_data = await get_user(user.id)
     total_points = user_data.get("total_points", 0)
@@ -40,4 +49,5 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mention = f"@{user.username}" if user.username else user.first_name
     emoji = "✅" if is_correct else "❌"
     text = f"{mention} {emoji} {points_change:+d} | Total: {total_points}"
+    
     await context.bot.send_message(chat_id=chat_id, text=text)
