@@ -8,6 +8,7 @@ import random
 
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES
 from bot.database.models import get_random_question, log_poll, get_all_groups
+from bot.handlers.poll_answer import score_messages
 
 # backup import
 from bot.handlers.backup import backup
@@ -18,7 +19,6 @@ scheduler = AsyncIOScheduler(timezone=timezone(TIMEZONE))
 
 last_polls = {}
 
-# PCB subjects
 SUBJECTS = ["Physics", "Chemistry", "Biology"]
 
 
@@ -30,7 +30,6 @@ async def send_quiz(bot: Bot):
 
         try:
 
-            # random subject
             subject = random.choice(SUBJECTS)
 
             question = await get_random_question(subject)
@@ -42,11 +41,23 @@ async def send_quiz(bot: Bot):
             options = question["options"]
             correct_option_id = question["correct_index"]
 
+            # delete previous poll
             if chat_id in last_polls:
                 try:
                     await bot.delete_message(chat_id, last_polls[chat_id])
                 except:
                     pass
+
+            # delete score messages
+            if chat_id in score_messages:
+
+                for msg_id in score_messages[chat_id]:
+                    try:
+                        await bot.delete_message(chat_id, msg_id)
+                    except:
+                        pass
+
+                score_messages[chat_id] = []
 
             message = await bot.send_poll(
                 chat_id=chat_id,
@@ -59,7 +70,6 @@ async def send_quiz(bot: Bot):
 
             last_polls[chat_id] = message.message_id
 
-            # FIXED log_poll
             await log_poll(
                 poll_id=message.poll.id,
                 message_id=message.message_id,
@@ -85,7 +95,6 @@ async def start_scheduler(bot: Bot):
         replace_existing=True
     )
 
-    # daily backup job
     scheduler.add_job(
         backup,
         trigger=IntervalTrigger(hours=24),
