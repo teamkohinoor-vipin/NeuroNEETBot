@@ -32,7 +32,7 @@ async def send_quiz(bot: Bot):
 
             now = time.time()
 
-            # 🔒 overlap protection (10 sec)
+            # overlap protection
             if chat_id in last_sent_time:
                 if now - last_sent_time[chat_id] < 10:
                     continue
@@ -41,7 +41,6 @@ async def send_quiz(bot: Bot):
 
             subject = random.choice(SUBJECTS)
 
-            # ⭐ random + non-repeat question
             question = await get_random_question(subject, chat_id)
 
             if not question:
@@ -51,7 +50,7 @@ async def send_quiz(bot: Bot):
             options = question["options"]
             correct_option_id = question["correct_index"]
 
-            # 🗑 delete previous poll safely
+            # delete old poll (30 sec बाद)
             if chat_id in last_polls:
                 try:
                     if now - poll_time.get(chat_id, 0) > 30:
@@ -59,7 +58,7 @@ async def send_quiz(bot: Bot):
                 except:
                     pass
 
-            # 🗑 delete score messages
+            # delete score messages
             if chat_id in score_messages:
 
                 for msg_id in score_messages[chat_id]:
@@ -70,7 +69,6 @@ async def send_quiz(bot: Bot):
 
                 score_messages[chat_id] = []
 
-            # 📊 send new poll
             message = await bot.send_poll(
                 chat_id=chat_id,
                 question=question["question"],
@@ -100,7 +98,6 @@ async def send_quiz(bot: Bot):
 
 async def start_scheduler(bot: Bot):
 
-    # 🔒 prevent duplicate scheduler
     if scheduler.running:
         logger.info("Scheduler already running")
         return
