@@ -73,11 +73,11 @@ async def add_question(question_data: dict):
     return result.inserted_id
 
 
-# ⭐ RANDOM NON-REPEAT QUESTION SYSTEM
+# ⭐ RANDOM + NO REPEAT UNTIL DATABASE ENDS
 async def get_random_question(subject: str, chat_id: int):
 
     used_cursor = db.db.poll_logs.find(
-        {"chat_id": chat_id, "subject": subject},
+        {"chat_id": chat_id},
         {"question_id": 1}
     )
 
@@ -97,7 +97,7 @@ async def get_random_question(subject: str, chat_id: int):
     cursor = db.db.questions.aggregate(pipeline)
     questions = await cursor.to_list(length=1)
 
-    # अगर सारे questions भेज दिए
+    # अगर database खत्म हो जाए
     if not questions:
 
         pipeline = [
