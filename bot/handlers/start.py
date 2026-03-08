@@ -25,7 +25,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Welcome message
     text = (
         f"🧪 *Welcome {user} to NeuroNEETBot!* 🧪\n\n"
-        "I can send automatic NEET quizzes every 20 minutes.\n\n"
+        "I can send automatic NEET quizzes every 5 minutes.\n\n"
         "🌅 *6:00 AM – 12:00 PM* → Physics ⚛️\n"
         "☀️ *12:00 PM – 6:00 PM* → Chemistry 🧪\n"
         "🌙 *6:00 PM – 12:00 AM* → Biology 🧬\n"
