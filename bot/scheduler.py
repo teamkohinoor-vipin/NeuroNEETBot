@@ -1,7 +1,6 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from pytz import timezone
-from datetime import datetime
 from telegram import Bot, Poll
 import logging
 import random
@@ -9,8 +8,6 @@ import random
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES
 from bot.database.models import get_random_question, log_poll, get_all_groups
 from bot.handlers.poll_answer import score_messages
-
-# backup import
 from bot.handlers.backup import backup
 
 logger = logging.getLogger(__name__)
@@ -32,7 +29,8 @@ async def send_quiz(bot: Bot):
 
             subject = random.choice(SUBJECTS)
 
-            question = await get_random_question(subject)
+            # ⭐ chat_id added
+            question = await get_random_question(subject, chat_id)
 
             if not question:
                 logger.warning(f"No question found for {subject}")
@@ -41,14 +39,12 @@ async def send_quiz(bot: Bot):
             options = question["options"]
             correct_option_id = question["correct_index"]
 
-            # delete previous poll
             if chat_id in last_polls:
                 try:
                     await bot.delete_message(chat_id, last_polls[chat_id])
                 except:
                     pass
 
-            # delete score messages
             if chat_id in score_messages:
 
                 for msg_id in score_messages[chat_id]:
