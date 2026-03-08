@@ -4,7 +4,7 @@ from pytz import timezone
 from telegram import Bot, Poll
 import logging
 import random
-import time
+import asyncio
 
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES
 from bot.database.models import get_random_question, log_poll, get_all_groups
@@ -16,8 +16,6 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler(timezone=timezone(TIMEZONE))
 
 last_polls = {}
-poll_time = {}
-last_sent_time = {}
 
 SUBJECTS = ["Physics", "Chemistry", "Biology"]
 
@@ -30,15 +28,6 @@ async def send_quiz(bot: Bot):
 
         try:
 
-            now = time.time()
-
-            # overlap protection
-            if chat_id in last_sent_time:
-                if now - last_sent_time[chat_id] < 10:
-                    continue
-
-            last_sent_time[chat_id] = now
-
             subject = random.choice(SUBJECTS)
 
             question = await get_random_question(subject, chat_id)
@@ -50,11 +39,10 @@ async def send_quiz(bot: Bot):
             options = question["options"]
             correct_option_id = question["correct_index"]
 
-            # delete old poll (30 sec बाद)
+            # delete previous poll
             if chat_id in last_polls:
                 try:
-                    if now - poll_time.get(chat_id, 0) > 30:
-                        await bot.delete_message(chat_id, last_polls[chat_id])
+                    await bot.delete_message(chat_id, last_polls[chat_id])
                 except:
                     pass
 
@@ -79,7 +67,6 @@ async def send_quiz(bot: Bot):
             )
 
             last_polls[chat_id] = message.message_id
-            poll_time[chat_id] = time.time()
 
             await log_poll(
                 poll_id=message.poll.id,
@@ -90,10 +77,13 @@ async def send_quiz(bot: Bot):
                 chat_id=chat_id
             )
 
-        except Exception as e:
-            logger.warning(f"Failed in {chat_id} : {e}")
+            # Telegram rate-limit protection
+            await asyncio.sleep(0.7)
 
-    logger.info("📊 Quiz sent to all groups")
+        except Exception as e:
+            logger.warning(f"Quiz failed in {chat_id}: {e}")
+
+    logger.info("Quiz sent to all groups")
 
 
 async def start_scheduler(bot: Bot):
