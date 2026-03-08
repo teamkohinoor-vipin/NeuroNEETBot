@@ -4,6 +4,7 @@ from pytz import timezone
 from telegram import Bot, Poll
 import logging
 import random
+import time
 
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES
 from bot.database.models import get_random_question, log_poll, get_all_groups
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler(timezone=timezone(TIMEZONE))
 
 last_polls = {}
+poll_time = {}
+last_sent_time = {}
 
 SUBJECTS = ["Physics", "Chemistry", "Biology"]
 
@@ -27,9 +30,18 @@ async def send_quiz(bot: Bot):
 
         try:
 
+            now = time.time()
+
+            # 🔒 overlap protection (10 sec)
+            if chat_id in last_sent_time:
+                if now - last_sent_time[chat_id] < 10:
+                    continue
+
+            last_sent_time[chat_id] = now
+
             subject = random.choice(SUBJECTS)
 
-            # ⭐ chat_id added
+            # ⭐ random + non-repeat question
             question = await get_random_question(subject, chat_id)
 
             if not question:
@@ -39,12 +51,15 @@ async def send_quiz(bot: Bot):
             options = question["options"]
             correct_option_id = question["correct_index"]
 
+            # 🗑 delete previous poll safely
             if chat_id in last_polls:
                 try:
-                    await bot.delete_message(chat_id, last_polls[chat_id])
+                    if now - poll_time.get(chat_id, 0) > 30:
+                        await bot.delete_message(chat_id, last_polls[chat_id])
                 except:
                     pass
 
+            # 🗑 delete score messages
             if chat_id in score_messages:
 
                 for msg_id in score_messages[chat_id]:
@@ -55,6 +70,7 @@ async def send_quiz(bot: Bot):
 
                 score_messages[chat_id] = []
 
+            # 📊 send new poll
             message = await bot.send_poll(
                 chat_id=chat_id,
                 question=question["question"],
@@ -65,6 +81,7 @@ async def send_quiz(bot: Bot):
             )
 
             last_polls[chat_id] = message.message_id
+            poll_time[chat_id] = time.time()
 
             await log_poll(
                 poll_id=message.poll.id,
@@ -82,6 +99,11 @@ async def send_quiz(bot: Bot):
 
 
 async def start_scheduler(bot: Bot):
+
+    # 🔒 prevent duplicate scheduler
+    if scheduler.running:
+        logger.info("Scheduler already running")
+        return
 
     scheduler.add_job(
         send_quiz,
