@@ -10,7 +10,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ChatMemberHandler,
-    ContextTypes      # 👈 IMPORTANT – missing import added
+    ContextTypes
 )
 
 from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
@@ -44,14 +44,17 @@ from bot.handlers.error import error_handler
 from bot.handlers.admin_stats import stats
 from bot.handlers.broadcast import broadcast
 
-# ✅ BACKUP IMPORT
+# BACKUP
 from bot.handlers.backup import backup, restore
 
-# ✅ RESET DATABASE IMPORT (ADDED – nothing removed)
+# RESET DATABASE
 from bot.handlers.reset_database import reset_database_command
 
-# Admin panel import
+# ADMIN PANEL
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
+
+# ✅ TXT IMPORT FEATURE (NEW)
+from bot.handlers.import_txt_questions import import_txt_questions
 
 
 logging.basicConfig(
@@ -71,7 +74,6 @@ async def unmatched_callback(update: Update, context):
     )
 
 
-# -------- AUTO GROUP SAVE --------
 async def track_groups(update: Update, context):
 
     chat = update.effective_chat
@@ -80,19 +82,16 @@ async def track_groups(update: Update, context):
         await add_group(chat.id)
 
 
-# 👇 Back to main menu handler
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle back button from help menu – shows the main start menu again."""
+
     query = update.callback_query
     await query.answer()
 
     user = query.from_user.first_name
     chat_type = query.message.chat.type
 
-    # Check question submission status
     question_enabled = await get_config("question_add_enabled", True)
 
-    # Build start message text
     text = (
         f"🧪 *Welcome {user} to NEET Quiz Bot!* 🧪\n\n"
         "I can send automatic NEET quizzes every 20 minutes.\n\n"
@@ -107,32 +106,44 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👇 *Use the buttons below:*"
     )
 
-    # Add to Group button
     add_group_button = InlineKeyboardButton(
         "📢 Add Bot to Group",
         url=f"https://t.me/{context.bot.username}?startgroup=true"
     )
 
     if chat_type == "private":
+
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
         ]
+
         if question_enabled:
-            keyboard_buttons.append([InlineKeyboardButton("➕ Add Question", callback_data="add_question")])
+            keyboard_buttons.append(
+                [InlineKeyboardButton("➕ Add Question", callback_data="add_question")]
+            )
+
         keyboard_buttons.extend([
             [add_group_button],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
         ])
+
         keyboard = keyboard_buttons
+
     else:
+
         bot_username = context.bot.username
+
         keyboard = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
             [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
         ]
+
         if question_enabled:
-            keyboard.append([InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")])
+            keyboard.append(
+                [InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")]
+            )
+
         keyboard.extend([
             [add_group_button],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
@@ -160,21 +171,24 @@ def main():
         )
 
     application.add_handler(CommandHandler("start", start))
-
     application.add_handler(CommandHandler("stats", stats))
-
     application.add_handler(CommandHandler("broadcast", broadcast))
 
-    # ✅ BACKUP COMMANDS
+    # BACKUP
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
 
-    # ✅ RESET DATABASE COMMAND (ADDED – nothing removed)
+    # RESET DATABASE
     application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
-    # ✅ restore file accept handler (added)
+    # restore file accept
     application.add_handler(
         MessageHandler(filters.Document.ALL, restore)
+    )
+
+    # ✅ TXT QUESTION IMPORT
+    application.add_handler(
+        MessageHandler(filters.Document.FileExtension("txt"), import_txt_questions)
     )
 
     application.add_handler(
@@ -193,18 +207,16 @@ def main():
         PollAnswerHandler(poll_answer)
     )
 
-    # 👇 Admin panel command and callbacks
     application.add_handler(CommandHandler("adminpanel", admin_panel))
+
     application.add_handler(
         CallbackQueryHandler(admin_panel_callback, pattern="^admin_(toggle|panel|close)")
     )
 
-    # Existing admin callback for batch review
     application.add_handler(
         CallbackQueryHandler(admin_callback, pattern="^admin_")
     )
 
-    # 👇 Back to main menu callback
     application.add_handler(
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
@@ -268,12 +280,10 @@ def main():
 
     application.add_handler(conv_handler)
 
-    # -------- AUTO GROUP TRACK (bot added) --------
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
-    # -------- AUTO GROUP TRACK (any message in group) --------
     application.add_handler(
         MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
