@@ -47,6 +47,9 @@ from bot.handlers.broadcast import broadcast
 # ✅ BACKUP IMPORT
 from bot.handlers.backup import backup, restore
 
+# ✅ RESET DATABASE IMPORT (ADDED – nothing removed)
+from bot.handlers.reset_database import reset_database_command
+
 # Admin panel import
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
@@ -165,6 +168,9 @@ def main():
     # ✅ BACKUP COMMANDS
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
+
+    # ✅ RESET DATABASE COMMAND (ADDED – nothing removed)
+    application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
     # ✅ restore file accept handler (added)
     application.add_handler(
