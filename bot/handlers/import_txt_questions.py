@@ -2,7 +2,6 @@ import re
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database.models import add_question
-from bot.database.db import db
 
 # users in import mode
 import_mode = set()
@@ -31,6 +30,19 @@ async def stop_import(update: Update, context: ContextTypes.DEFAULT_TYPE):
         import_mode.remove(user_id)
 
     await update.message.reply_text("🛑 TXT Import Mode Stopped")
+
+
+# ✅ option cleaning (NEW)
+def clean_option(text):
+    text = text.strip()
+
+    # remove A) A. A - etc
+    text = re.sub(r"^[A-D][\).\s]+", "", text)
+
+    # remove extra starting symbols
+    text = re.sub(r"^[\)\.\-\s]+", "", text)
+
+    return text.strip()
 
 
 # txt file handler
@@ -72,8 +84,8 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
 
         return
 
-    # improved question pattern
-    pattern = r"Q:\s*(.*?)\nA[\)\.\-:]?\s*(.*?)\nB[\)\.\-:]?\s*(.*?)\nC[\)\.\-:]?\s*(.*?)\nD[\)\.\-:]?\s*(.*?)\nAnswer:\s*([ABCD])"
+    # question pattern
+    pattern = r"Q:\s*(.*?)\nA\s*(.*?)\nB\s*(.*?)\nC\s*(.*?)\nD\s*(.*?)\nAnswer:\s*([ABCD])"
 
     matches = re.findall(pattern, text, re.S)
 
@@ -82,17 +94,18 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ No questions found in file")
         return
 
-    questions_bulk = []
+    added = 0
 
     for q in matches:
 
         question = q[0].strip()
 
+        # ✅ cleaned options
         options = [
-            q[1].strip(),
-            q[2].strip(),
-            q[3].strip(),
-            q[4].strip()
+            clean_option(q[1]),
+            clean_option(q[2]),
+            clean_option(q[3]),
+            clean_option(q[4])
         ]
 
         correct_index = ["A","B","C","D"].index(q[5])
@@ -106,14 +119,12 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
             "approved": True
         }
 
-        questions_bulk.append(data)
+        await add_question(data)
 
-    # ⚡ BULK INSERT (FAST)
-    if questions_bulk:
-        await db.db.questions.insert_many(questions_bulk)
+        added += 1
 
     await update.message.reply_text(
-        f"✅ {len(questions_bulk)} questions imported\n"
+        f"✅ {added} questions imported\n"
         f"📚 Subject: {subject}\n"
         f"📖 Chapter: {chapter}"
     )
