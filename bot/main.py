@@ -53,7 +53,7 @@ from bot.handlers.reset_database import reset_database_command
 # ADMIN PANEL
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
-# ✅ TXT IMPORT FEATURE (NEW)
+# TXT IMPORT
 from bot.handlers.import_txt_questions import import_txt_questions
 
 
@@ -181,14 +181,14 @@ def main():
     # RESET DATABASE
     application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
-    # restore file accept
-    application.add_handler(
-        MessageHandler(filters.Document.ALL, restore)
-    )
-
-    # ✅ TXT QUESTION IMPORT
+    # ✅ TXT IMPORT FIRST
     application.add_handler(
         MessageHandler(filters.Document.FileExtension("txt"), import_txt_questions)
+    )
+
+    # restore handler
+    application.add_handler(
+        MessageHandler(filters.Document.ALL, restore)
     )
 
     application.add_handler(
@@ -219,77 +219,6 @@ def main():
 
     application.add_handler(
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
-    )
-
-    conv_handler = ConversationHandler(
-
-        entry_points=[
-            CommandHandler("addquestion", add_question_start),
-            CallbackQueryHandler(add_question_start, pattern="^add_question$")
-        ],
-
-        states={
-
-            SUBJECT: [
-                CallbackQueryHandler(subject_callback, pattern="^sub_")
-            ],
-
-            CLASS_: [
-                CallbackQueryHandler(class_callback, pattern="^class_")
-            ],
-
-            CHAPTER: [
-
-                CallbackQueryHandler(
-                    chapter_page,
-                    pattern="^chap_"
-                ),
-
-                CallbackQueryHandler(
-                    chapter_callback,
-                    pattern="^chapter_"
-                )
-
-            ],
-
-            QUESTION: [
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND,
-                    receive_question
-                )
-            ],
-
-            NEXT_ACTION: [
-                CallbackQueryHandler(
-                    next_action_callback,
-                    pattern="^(next_q|done_q)$"
-                )
-            ]
-
-        },
-
-        fallbacks=[
-            CommandHandler("cancel", cancel)
-        ],
-
-        per_user=True,
-        per_chat=True,
-        allow_reentry=True,
-        conversation_timeout=600
-    )
-
-    application.add_handler(conv_handler)
-
-    application.add_handler(
-        ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
-    )
-
-    application.add_handler(
-        MessageHandler(filters.ChatType.GROUPS, track_groups)
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(unmatched_callback)
     )
 
     application.add_error_handler(error_handler)
