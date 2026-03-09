@@ -2,6 +2,7 @@ import re
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database.models import add_question
+from bot.database.db import db
 
 # users in import mode
 import_mode = set()
@@ -71,8 +72,8 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
 
         return
 
-    # question pattern
-    pattern = r"Q:\s*(.*?)\nA\s*(.*?)\nB\s*(.*?)\nC\s*(.*?)\nD\s*(.*?)\nAnswer:\s*([ABCD])"
+    # improved question pattern
+    pattern = r"Q:\s*(.*?)\nA[\)\.\-:]?\s*(.*?)\nB[\)\.\-:]?\s*(.*?)\nC[\)\.\-:]?\s*(.*?)\nD[\)\.\-:]?\s*(.*?)\nAnswer:\s*([ABCD])"
 
     matches = re.findall(pattern, text, re.S)
 
@@ -81,7 +82,7 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ No questions found in file")
         return
 
-    added = 0
+    questions_bulk = []
 
     for q in matches:
 
@@ -105,12 +106,14 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
             "approved": True
         }
 
-        await add_question(data)
+        questions_bulk.append(data)
 
-        added += 1
+    # ⚡ BULK INSERT (FAST)
+    if questions_bulk:
+        await db.db.questions.insert_many(questions_bulk)
 
     await update.message.reply_text(
-        f"✅ {added} questions imported\n"
+        f"✅ {len(questions_bulk)} questions imported\n"
         f"📚 Subject: {subject}\n"
         f"📖 Chapter: {chapter}"
     )
