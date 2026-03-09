@@ -54,16 +54,26 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     now = datetime.utcnow()
 
+    # ---------- DAILY ----------
     if period == "daily":
 
         since = datetime(now.year, now.month, now.day)
         title = "📅 Daily Leaderboard"
 
+    # ---------- WEEKLY ----------
     elif period == "weekly":
 
-        since = now - timedelta(days=now.weekday())
+        start_of_week = now - timedelta(days=now.weekday())
+
+        since = datetime(
+            start_of_week.year,
+            start_of_week.month,
+            start_of_week.day
+        )
+
         title = "📊 Weekly Leaderboard"
 
+    # ---------- MONTHLY ----------
     else:
 
         since = datetime(now.year, now.month, 1)
