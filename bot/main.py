@@ -54,7 +54,7 @@ from bot.handlers.reset_database import reset_database_command
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
 # TXT IMPORT
-from bot.handlers.import_txt_questions import import_txt_questions
+from bot.handlers.import_txt_questions import import_command, import_txt_questions
 
 
 logging.basicConfig(
@@ -181,7 +181,10 @@ def main():
     # RESET DATABASE
     application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
-    # ✅ TXT IMPORT FIRST
+    # ✅ IMPORT COMMAND
+    application.add_handler(CommandHandler("import", import_command))
+
+    # TXT FILE IMPORT
     application.add_handler(
         MessageHandler(filters.Document.FileExtension("txt"), import_txt_questions)
     )
