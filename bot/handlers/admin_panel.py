@@ -3,28 +3,37 @@ from telegram.ext import ContextTypes
 from bot.config import ADMIN_ID
 from bot.database.models import get_config, set_config
 
+
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin panel command – only for bot owner."""
+
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized.")
         return
 
-    # Get current status of question submission
+    # existing feature
     question_add_enabled = await get_config("question_add_enabled", True)
-    status_text = "✅ ON" if question_add_enabled else "❌ OFF"
+    question_status = "✅ ON" if question_add_enabled else "❌ OFF"
+
+    # NEW feature
+    answer_mentions = await get_config("answer_mentions", True)
+    mention_status = "✅ ON" if answer_mentions else "❌ OFF"
 
     keyboard = [
-        [InlineKeyboardButton(f"Toggle Question Add ({status_text})", callback_data="admin_toggle_question")],
+        [InlineKeyboardButton(f"Toggle Question Add ({question_status})", callback_data="admin_toggle_question")],
+        [InlineKeyboardButton(f"Answer Mentions ({mention_status})", callback_data="admin_toggle_mentions")],
         [InlineKeyboardButton("Close", callback_data="admin_close")]
     ]
+
     await update.message.reply_text(
         "🛠 *Admin Panel*\n\nUse buttons to control features.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle callbacks from admin panel."""
+
     query = update.callback_query
     await query.answer()
 
@@ -32,28 +41,57 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("❌ Not authorized.")
         return
 
+    # -------- Toggle Question Add --------
     if query.data == "admin_toggle_question":
+
         current = await get_config("question_add_enabled", True)
         await set_config("question_add_enabled", not current)
+
         new_status = "✅ ON" if not current else "❌ OFF"
+
         await query.edit_message_text(
             f"Question submission toggled to {new_status}",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Back to Panel", callback_data="admin_panel_back")
             ]])
         )
+
+    # -------- Toggle Answer Mentions --------
+    elif query.data == "admin_toggle_mentions":
+
+        current = await get_config("answer_mentions", True)
+        await set_config("answer_mentions", not current)
+
+        new_status = "✅ ON" if not current else "❌ OFF"
+
+        await query.edit_message_text(
+            f"Answer mentions toggled to {new_status}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Back to Panel", callback_data="admin_panel_back")
+            ]])
+        )
+
+    # -------- Back to panel --------
     elif query.data == "admin_panel_back":
-        # Re‑show panel
+
         question_add_enabled = await get_config("question_add_enabled", True)
-        status_text = "✅ ON" if question_add_enabled else "❌ OFF"
+        question_status = "✅ ON" if question_add_enabled else "❌ OFF"
+
+        answer_mentions = await get_config("answer_mentions", True)
+        mention_status = "✅ ON" if answer_mentions else "❌ OFF"
+
         keyboard = [
-            [InlineKeyboardButton(f"Toggle Question Add ({status_text})", callback_data="admin_toggle_question")],
+            [InlineKeyboardButton(f"Toggle Question Add ({question_status})", callback_data="admin_toggle_question")],
+            [InlineKeyboardButton(f"Answer Mentions ({mention_status})", callback_data="admin_toggle_mentions")],
             [InlineKeyboardButton("Close", callback_data="admin_close")]
         ]
+
         await query.edit_message_text(
             "🛠 *Admin Panel*\n\nUse buttons to control features.",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+    # -------- Close --------
     elif query.data == "admin_close":
         await query.delete_message()
