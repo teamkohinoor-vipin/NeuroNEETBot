@@ -2,6 +2,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from datetime import datetime, timedelta
 from bot.database.models import get_top_users
+import pytz
+
+
+IST = pytz.timezone("Asia/Kolkata")
 
 
 def leaderboard_keyboard():
@@ -52,12 +56,19 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     chat_id = query.message.chat.id
     period = query.data.split("_")[1]
 
-    now = datetime.utcnow()
+    now = datetime.now(IST)
 
     # ---------- DAILY ----------
     if period == "daily":
 
-        since = datetime(now.year, now.month, now.day)
+        since = datetime(
+            now.year,
+            now.month,
+            now.day,
+            0, 0, 0,
+            tzinfo=IST
+        )
+
         title = "📅 Daily Leaderboard"
 
     # ---------- WEEKLY ----------
@@ -68,7 +79,9 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         since = datetime(
             start_of_week.year,
             start_of_week.month,
-            start_of_week.day
+            start_of_week.day,
+            0, 0, 0,
+            tzinfo=IST
         )
 
         title = "📊 Weekly Leaderboard"
@@ -76,7 +89,14 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     # ---------- MONTHLY ----------
     else:
 
-        since = datetime(now.year, now.month, 1)
+        since = datetime(
+            now.year,
+            now.month,
+            1,
+            0, 0, 0,
+            tzinfo=IST
+        )
+
         title = "📆 Monthly Leaderboard"
 
 
