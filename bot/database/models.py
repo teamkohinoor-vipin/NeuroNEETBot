@@ -175,7 +175,6 @@ async def log_poll(poll_id: int, message_id: int, question_id: ObjectId, subject
 
 
 async def get_poll_log(poll_id: int):
-
     return await db.db.poll_logs.find_one({"poll_id": poll_id})
 
 
@@ -236,3 +235,31 @@ async def set_config(key: str, value):
         {"$set": {"value": value}},
         upsert=True
     )
+
+
+# ---------------- RESET DATABASE FUNCTION ----------------
+async def reset_database():
+
+    questions = await db.db.questions.delete_many({})
+    poll_logs = await db.db.poll_logs.delete_many({})
+    answers = await db.db.answers.delete_many({})
+    pending = await db.db.pending_batches.delete_many({})
+
+    await db.db.users.update_many(
+        {},
+        {
+            "$set": {
+                "total_correct": 0,
+                "total_wrong": 0,
+                "total_points": 0,
+                "chapter_stats": {}
+            }
+        }
+    )
+
+    return {
+        "questions": questions.deleted_count,
+        "poll_logs": poll_logs.deleted_count,
+        "answers": answers.deleted_count,
+        "pending_batches": pending.deleted_count
+    }
