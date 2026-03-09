@@ -54,8 +54,11 @@ from bot.handlers.reset_database import reset_database_command
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
 # TXT IMPORT
-from bot.handlers.import_txt_questions import import_command, import_txt_questions
-
+from bot.handlers.import_txt_questions import (
+    import_command,
+    stop_import,
+    import_txt_questions
+)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -181,8 +184,9 @@ def main():
     # RESET DATABASE
     application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
-    # ✅ IMPORT COMMAND
+    # IMPORT COMMANDS
     application.add_handler(CommandHandler("import", import_command))
+    application.add_handler(CommandHandler("stopimport", stop_import))
 
     # TXT FILE IMPORT
     application.add_handler(
