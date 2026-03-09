@@ -1,25 +1,38 @@
+import re
 from telegram import Update
 from telegram.ext import ContextTypes
-import re
 from bot.database.models import add_question
 
-# user import mode
-import_mode = {}
+# users in import mode
+import_mode = set()
 
 
+# start import command
 async def import_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
-    import_mode[user_id] = True
+    import_mode.add(user_id)
 
     await update.message.reply_text(
-        "📂 Send TXT file to import questions\n\n"
-        "Format:\n"
-        "Subject: Biology\n"
-        "Chapter: Animal Kingdom"
+        "📂 TXT Import Mode Started\n\n"
+        "Send TXT files to import questions.\n"
+        "You can send multiple files.\n\n"
+        "Stop with /stopimport"
     )
 
 
+# stop import
+async def stop_import(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
+
+    if user_id in import_mode:
+        import_mode.remove(user_id)
+
+    await update.message.reply_text("🛑 TXT Import Mode Stopped")
+
+
+# txt file handler
 async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
@@ -38,6 +51,7 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
     subject = None
     chapter = None
 
+    # detect subject and chapter
     for line in text.splitlines():
 
         if line.lower().startswith("subject:"):
@@ -49,20 +63,41 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
         if subject and chapter:
             break
 
+    if not subject or not chapter:
+
+        await update.message.reply_text(
+            "❌ Subject or Chapter missing in file"
+        )
+
+        return
+
+    # question pattern
     pattern = r"Q:\s*(.*?)\nA\s*(.*?)\nB\s*(.*?)\nC\s*(.*?)\nD\s*(.*?)\nAnswer:\s*([ABCD])"
 
     matches = re.findall(pattern, text, re.S)
+
+    if not matches:
+
+        await update.message.reply_text("❌ No questions found in file")
+        return
 
     added = 0
 
     for q in matches:
 
-        options = [q[1], q[2], q[3], q[4]]
+        question = q[0].strip()
+
+        options = [
+            q[1].strip(),
+            q[2].strip(),
+            q[3].strip(),
+            q[4].strip()
+        ]
 
         correct_index = ["A","B","C","D"].index(q[5])
 
         data = {
-            "question": q[0],
+            "question": question,
             "options": options,
             "correct_index": correct_index,
             "subject": subject,
@@ -73,8 +108,6 @@ async def import_txt_questions(update: Update, context: ContextTypes.DEFAULT_TYP
         await add_question(data)
 
         added += 1
-
-    import_mode.pop(user_id, None)
 
     await update.message.reply_text(
         f"✅ {added} questions imported\n"
