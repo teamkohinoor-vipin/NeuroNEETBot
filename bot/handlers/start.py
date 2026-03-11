@@ -6,6 +6,103 @@ from bot.database.models import get_config
 from datetime import datetime
 
 
+HELP_PAGES = [
+
+"""
+📖 *NeuroNEETBot – HELP GUIDE*
+
+This bot provides automated NEET quiz practice in Telegram groups.
+
+━━━━━━━━━━━━━━━━
+
+👨‍🎓 *User Commands*
+
+/start  
+Start the bot and view menu.
+
+➕ Add Question  
+Submit NEET questions to the quiz database.
+""",
+
+"""
+👥 *Group Commands*
+
+/leaderboard  
+Show top quiz players in the group.
+
+━━━━━━━━━━━━━━━━
+
+👑 *Admin Commands*
+
+/broadcast  
+Send message to all groups.
+
+/stats  
+View bot statistics.
+
+/adminpanel  
+Open admin control panel.
+""",
+
+"""
+💾 *Database Commands*
+
+/backup  
+Download Database backup file.
+
+/restore  
+Restore database by sending backup file.
+
+━━━━━━━━━━━━━━━━
+
+⚙️ *Quiz System*
+
+• Questions are sent automatically  
+• Quiz runs every **20 minutes**
+""",
+
+"""
+🏆 *Leaderboard*
+
+Compete with other students and climb the leaderboard.
+
+━━━━━━━━━━━━━━━━
+
+💡 *Tip*
+
+Practice daily quizzes to improve speed and accuracy for NEET.
+
+Good luck with your preparation 🚀
+"""
+]
+
+
+def help_keyboard(page):
+
+    buttons = []
+
+    nav = []
+
+    if page > 0:
+        nav.append(
+            InlineKeyboardButton("⬅️ Back", callback_data=f"help_{page-1}")
+        )
+
+    if page < len(HELP_PAGES) - 1:
+        nav.append(
+            InlineKeyboardButton("Next ➡️", callback_data=f"help_{page+1}")
+        )
+
+    if nav:
+        buttons.append(nav)
+
+    buttons.append(
+        [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]
+    )
+
+    return InlineKeyboardMarkup(buttons)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user.first_name
@@ -125,73 +222,24 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    help_text = """
-📖 *NeuroNEETBot – HELP GUIDE*
-
-This bot provides automated NEET quiz practice in Telegram groups.
-
-━━━━━━━━━━━━━━━━
-
-👨‍🎓 *User Commands*
-
-/start  
-Start the bot and view menu.
-
-➕ Add Question  
-Submit NEET questions to the quiz database.
-
-━━━━━━━━━━━━━━━━
-
-👥 *Group Commands*
-
-/leaderboard  
-Show top quiz players in the group.
-
-━━━━━━━━━━━━━━━━
-
-👑 *Admin Commands*
-
-/broadcast  
-Send message to all groups.
-
-/stats  
-View bot statistics.
-
-/adminpanel  
-Open admin control panel.
-
-/backup
-Download Database backup file.
-
-/restore 
-Restore all data by sending backup file.
-
-━━━━━━━━━━━━━━━━
-
-⚙️ *Quiz System*
-
-• Questions are sent automatically  
-• Quiz runs every **20 minutes**  
-• Questions are NEET-level MCQ
-
-━━━━━━━━━━━━━━━━
-
-🏆 *Leaderboard*
-
-Compete with other students and climb the leaderboard.
-
-━━━━━━━━━━━━━━━━
-
-💡 *Tip*
-
-Practice daily quizzes to improve speed and accuracy for NEET.
-"""
-
-    back_button = [[InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]]
-    reply_markup = InlineKeyboardMarkup(back_button)
+    page = 0
 
     await query.edit_message_text(
-        help_text,
+        HELP_PAGES[page],
         parse_mode="Markdown",
-        reply_markup=reply_markup
+        reply_markup=help_keyboard(page)
+    )
+
+
+async def help_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    page = int(query.data.split("_")[1])
+
+    await query.edit_message_text(
+        HELP_PAGES[page],
+        parse_mode="Markdown",
+        reply_markup=help_keyboard(page)
     )
