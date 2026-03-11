@@ -18,7 +18,7 @@ from bot.database.db import connect_db, close_db
 from bot.scheduler import start_scheduler
 from bot.database.models import add_group, get_config
 
-from bot.handlers.start import start, help_callback
+from bot.handlers.start import start, help_callback, help_page
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
 from bot.handlers.poll_answer import poll_answer
 
@@ -209,8 +209,14 @@ def main():
         MessageHandler(filters.Document.ALL, restore)
     )
 
+    # HELP BUTTON
     application.add_handler(
         CallbackQueryHandler(help_callback, pattern="^help$")
+    )
+
+    # HELP PAGINATION
+    application.add_handler(
+        CallbackQueryHandler(help_page, pattern="^help_")
     )
 
     application.add_handler(
