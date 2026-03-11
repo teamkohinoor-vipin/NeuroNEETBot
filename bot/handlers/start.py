@@ -14,6 +14,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     username = update.effective_user.username
 
+    # 🔎 CHECK USER EXISTS
+    existing_user = await db.db.users.find_one({"user_id": user_id})
+
+    # SAVE USER
     await db.db.users.update_one(
         {"user_id": user_id},
         {"$set": {
@@ -24,27 +28,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # ===== NEW USER NOTIFICATION =====
+    if not existing_user:
 
-    total_users = await db.db.users.count_documents({})
+        total_users = await db.db.users.count_documents({})
 
-    username_text = f"@{username}" if username else "No username"
+        username_text = f"@{username}" if username else "No username"
 
-    notify_text = (
-        "🆕 New User Started the Bot!\n\n"
-        f"👤 User: {user}\n"
-        f"🆔 ID: {user_id}\n"
-        f"📛 Username: {username_text}\n"
-        f"👥 Total Users: {total_users}\n"
-        f"⏰ Time: {datetime.now()}"
-    )
-
-    try:
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=notify_text
+        notify_text = (
+            "🆕 New User Started the Bot!\n\n"
+            f"👤 User: {user}\n"
+            f"🆔 ID: {user_id}\n"
+            f"📛 Username: {username_text}\n"
+            f"👥 Total Users: {total_users}\n"
+            f"⏰ Time: {datetime.now()}"
         )
-    except:
-        pass
+
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=notify_text
+            )
+        except:
+            pass
 
     # ===== WELCOME MESSAGE =====
 
