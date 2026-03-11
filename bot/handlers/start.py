@@ -151,17 +151,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ===== WELCOME MESSAGE =====
 
     text = (
-        f"🧪 *Welcome {user} to NeuroNEETBot!* 🧪\n\n"
-        "I can send automatic NEET quizzes every 5 minutes.\n\n"
-        "🌅 *6:00 AM – 12:00 PM* → Physics ⚛️\n"
-        "☀️ *12:00 PM – 6:00 PM* → Chemistry 🧪\n"
-        "🌙 *6:00 PM – 12:00 AM* → Biology 🧬\n"
-        "😴 *12:00 AM – 6:00 AM* → Sleep Mode\n\n"
-        "📊 *Scoring System*\n"
-        "✅ Correct → +1 point\n"
-        "❌ Wrong → -1 point\n\n"
-        "🎯 Just add me in your group and make me Admin.\n\n"
-        "👇 *Use the buttons below:*"
+    f"🧪 *Welcome {user} to NeuroNEETBot!* 🧪\n\n"
+    "I can send automatic Random NEET quizzes every 5 minutes.\n\n"
+    "📚 *Subjects Covered*\n"
+    "⚛️ Physics\n"
+    "🧪 Chemistry\n"
+    "🧬 Biology\n\n"
+    "📊 *Scoring System*\n"
+    "✅ Correct → +1 point\n"
+    "❌ Wrong → -1 point\n\n"
+    "🎯 Just add me in your group and make me Admin.\n\n"
+    "👇 *Use the buttons below:*"
     )
 
     question_enabled = await get_config("question_add_enabled", True)
