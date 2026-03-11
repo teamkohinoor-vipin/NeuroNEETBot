@@ -60,6 +60,10 @@ from bot.handlers.import_txt_questions import (
     import_txt_questions
 )
 
+# NEW GROUP COMMAND
+from bot.handlers.groups import groups
+
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -176,6 +180,9 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
+
+    # NEW GROUP COMMAND
+    application.add_handler(CommandHandler("groups", groups))
 
     # BACKUP
     application.add_handler(CommandHandler("backup", backup))
