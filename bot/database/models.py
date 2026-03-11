@@ -15,28 +15,22 @@ async def get_user(user_id: int):
     return await db.db.users.find_one({"user_id": user_id})
 
 
+# ✅ FIXED FUNCTION
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
 
-    await db.db.users.update_one(
-        {"user_id": user_id},
-        {"$setOnInsert": {
-            "user_id": user_id,
-            "username": username,
-            "total_correct": 0,
-            "total_wrong": 0,
-            "total_points": 0,
-            "chapter_stats": {}
-        }},
-        upsert=True
-    )
+    # user exist check
+    user = await db.db.users.find_one({"user_id": user_id})
+
+    # अगर user ने /start नहीं किया तो stats update नहीं होगा
+    if not user:
+        return
 
     update = {
         "$inc": {
             "total_correct" if correct else "total_wrong": 1,
             "total_points": 1 if correct else -1,
             f"chapter_stats.{chapter}.correct" if correct else f"chapter_stats.{chapter}.wrong": 1
-        },
-        "$set": {"username": username}
+        }
     }
 
     await db.db.users.update_one({"user_id": user_id}, update)
