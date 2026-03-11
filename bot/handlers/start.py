@@ -1,15 +1,16 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from bot.config import SUPPORT_CHANNEL, DEVELOPER_USERNAME
+from bot.config import SUPPORT_CHANNEL, DEVELOPER_USERNAME, ADMIN_ID
 from bot.database.db import db
 from bot.database.models import get_config
+from datetime import datetime
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user.first_name
     chat_type = update.effective_chat.type
 
-    # Save user
     user_id = update.effective_user.id
     username = update.effective_user.username
 
@@ -22,7 +23,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         upsert=True
     )
 
-    # Welcome message
+    # ===== NEW USER NOTIFICATION =====
+
+    total_users = await db.db.users.count_documents({})
+
+    username_text = f"@{username}" if username else "No username"
+
+    notify_text = (
+        "🆕 New User Started the Bot!\n\n"
+        f"👤 User: {user}\n"
+        f"🆔 ID: {user_id}\n"
+        f"📛 Username: {username_text}\n"
+        f"👥 Total Users: {total_users}\n"
+        f"⏰ Time: {datetime.now()}"
+    )
+
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=notify_text
+        )
+    except:
+        pass
+
+    # ===== WELCOME MESSAGE =====
+
     text = (
         f"🧪 *Welcome {user} to NeuroNEETBot!* 🧪\n\n"
         "I can send automatic NEET quizzes every 5 minutes.\n\n"
@@ -37,35 +62,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👇 *Use the buttons below:*"
     )
 
-    # Check if question submission is enabled
     question_enabled = await get_config("question_add_enabled", True)
 
-    # Add Group Button (always show)
     add_group_button = InlineKeyboardButton(
         "📢 Add Bot to Group",
         url=f"https://t.me/{context.bot.username}?startgroup=true"
     )
 
     if chat_type == "private":
+
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
         ]
+
         if question_enabled:
-            keyboard_buttons.append([InlineKeyboardButton("➕ Add Question", callback_data="add_question")])
+            keyboard_buttons.append(
+                [InlineKeyboardButton("➕ Add Question", callback_data="add_question")]
+            )
+
         keyboard_buttons.extend([
             [add_group_button],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
         ])
+
         keyboard = keyboard_buttons
+
     else:
+
         bot_username = context.bot.username
+
         keyboard = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
             [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
         ]
+
         if question_enabled:
-            keyboard.append([InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")])
+            keyboard.append(
+                [InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")]
+            )
+
         keyboard.extend([
             [add_group_button],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
@@ -110,8 +146,6 @@ Show top quiz players in the group.
 
 👑 *Admin Commands*
 
-Only bot admin can use these.
-
 /broadcast  
 Send message to all groups.
 
@@ -126,6 +160,7 @@ Download Database backup file.
 
 /restore 
 Restore all data by sending backup file.
+
 ━━━━━━━━━━━━━━━━
 
 ⚙️ *Quiz System*
@@ -145,23 +180,13 @@ Compete with other students and climb the leaderboard.
 💡 *Tip*
 
 Practice daily quizzes to improve speed and accuracy for NEET.
-
-Good luck with your preparation! 🚀
 """
 
     back_button = [[InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_main")]]
     reply_markup = InlineKeyboardMarkup(back_button)
 
-    try:
-        await query.edit_message_text(
-            help_text,
-            parse_mode="Markdown",
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        # In case edit fails (e.g., message too old or no changes), send as new message
-        await query.message.reply_text(
-            help_text,
-            parse_mode="Markdown",
-            reply_markup=reply_markup
-        )
+    await query.edit_message_text(
+        help_text,
+        parse_mode="Markdown",
+        reply_markup=reply_markup
+    )
