@@ -60,8 +60,8 @@ from bot.handlers.import_txt_questions import (
     import_txt_questions
 )
 
-# NEW GROUP COMMAND
-from bot.handlers.groups import groups
+# GROUP LIST FEATURE
+from bot.handlers.groups import groups, group_page_callback
 
 
 logging.basicConfig(
@@ -181,8 +181,12 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
 
-    # NEW GROUP COMMAND
+    # GROUP LIST COMMAND
     application.add_handler(CommandHandler("groups", groups))
+
+    application.add_handler(
+        CallbackQueryHandler(group_page_callback, pattern="^group_page_")
+    )
 
     # BACKUP
     application.add_handler(CommandHandler("backup", backup))
