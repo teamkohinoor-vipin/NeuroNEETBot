@@ -73,7 +73,8 @@ async def send_group_page(update, context, page):
         await update.callback_query.edit_message_text(
             text,
             parse_mode="Markdown",
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            disable_web_page_preview=True
         )
 
     else:
@@ -81,7 +82,8 @@ async def send_group_page(update, context, page):
         await update.message.reply_text(
             text,
             parse_mode="Markdown",
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            disable_web_page_preview=True
         )
 
 
