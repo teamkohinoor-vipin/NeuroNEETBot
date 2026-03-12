@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from bot.database.db import db
 from bson import ObjectId
@@ -15,16 +16,26 @@ async def get_user(user_id: int):
     return await db.db.users.find_one({"user_id": user_id})
 
 
-# ✅ FIXED FUNCTION
+# ✅ FIXED FUNCTION – अब user को create करता है अगर exist नहीं करता
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
+    # Ensure user exists (upsert)
+    await db.db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$setOnInsert": {
+                "user_id": user_id,
+                "username": username,
+                "total_correct": 0,
+                "total_wrong": 0,
+                "total_points": 0,
+                "chapter_stats": {}
+            },
+            "$set": {"username": username}
+        },
+        upsert=True
+    )
 
-    # user exist check
-    user = await db.db.users.find_one({"user_id": user_id})
-
-    # अगर user ने /start नहीं किया तो stats update नहीं होगा
-    if not user:
-        return
-
+    # Now apply increments
     update = {
         "$inc": {
             "total_correct" if correct else "total_wrong": 1,
@@ -32,7 +43,6 @@ async def update_user_stats(user_id: int, username: str, correct: bool, chapter:
             f"chapter_stats.{chapter}.correct" if correct else f"chapter_stats.{chapter}.wrong": 1
         }
     }
-
     await db.db.users.update_one({"user_id": user_id}, update)
 
 
