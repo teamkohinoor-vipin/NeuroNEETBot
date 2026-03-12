@@ -32,11 +32,8 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
 
     if update.effective_user.id != ADMIN_ID:
-    try:
         await message.reply_text("❌ Admin only command")
-    except:
-        pass
-    return
+        return
 
     try:
 
@@ -98,11 +95,9 @@ async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
 
     if update.effective_user.id != ADMIN_ID:
-    try:
         await message.reply_text("❌ Admin only command")
-    except:
-        pass
-    return
+        return
+
     document = message.document
 
     if not document:
