@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from bot.database.db import db
 from bson import ObjectId
@@ -16,26 +15,25 @@ async def get_user(user_id: int):
     return await db.db.users.find_one({"user_id": user_id})
 
 
-# ✅ FIXED FUNCTION – अब user को create करता है अगर exist नहीं करता
+# ✅ FIXED – अब username दो बार set नहीं होगा
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
-    # Ensure user exists (upsert)
+    # पहले user को create करो (अगर नहीं है तो)
     await db.db.users.update_one(
         {"user_id": user_id},
         {
+            "$set": {"username": username},
             "$setOnInsert": {
                 "user_id": user_id,
-                "username": username,
                 "total_correct": 0,
                 "total_wrong": 0,
                 "total_points": 0,
                 "chapter_stats": {}
-            },
-            "$set": {"username": username}
+            }
         },
         upsert=True
     )
 
-    # Now apply increments
+    # अब points increment करो
     update = {
         "$inc": {
             "total_correct" if correct else "total_wrong": 1,
