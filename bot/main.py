@@ -6,6 +6,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     PollAnswerHandler,
+    ConversationHandler,
     MessageHandler,
     filters,
     ChatMemberHandler,
@@ -21,22 +22,45 @@ from bot.handlers.start import start, help_callback, help_page
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
 from bot.handlers.poll_answer import poll_answer
 
+from bot.handlers.question_submission import (
+    add_question_start,
+    subject_callback,
+    class_callback,
+    chapter_callback,
+    chapter_page,
+    receive_question,
+    next_action_callback,
+    cancel,
+    SUBJECT,
+    CLASS_,
+    CHAPTER,
+    QUESTION,
+    NEXT_ACTION
+)
+
 from bot.handlers.admin import admin_callback
 from bot.handlers.error import error_handler
 
 from bot.handlers.admin_stats import stats
 from bot.handlers.broadcast import broadcast
 
+# BACKUP
 from bot.handlers.backup import backup, restore
+
+# RESET DATABASE
 from bot.handlers.reset_database import reset_database_command
+
+# ADMIN PANEL
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
+# TXT IMPORT
 from bot.handlers.import_txt_questions import (
     import_command,
     stop_import,
     import_txt_questions
 )
 
+# GROUP LIST FEATURE
 from bot.handlers.groups import groups, group_page_callback
 
 
@@ -48,25 +72,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ---------------- GROUP TRACK ---------------- #
+async def unmatched_callback(update: Update, context):
 
-async def track_groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.warning(f"Unknown callback: {update.callback_query.data}")
+
+    await update.callback_query.answer(
+        "This button is not available. Use /start again."
+    )
+
+
+async def track_groups(update: Update, context):
 
     chat = update.effective_chat
 
-    if not chat:
-        return
-
-    if chat.type not in ["group", "supergroup"]:
-        return
-
-    try:
+    if chat and chat.type in ["group", "supergroup"]:
         await add_group(chat.id)
-    except Exception as e:
-        logger.warning(f"group save failed: {e}")
 
-
-# ---------------- BACK TO MAIN ---------------- #
 
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -99,19 +120,42 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if chat_type == "private":
 
-        keyboard = [
+        keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
+        ]
+
+        if question_enabled:
+            keyboard_buttons.append(
+                [InlineKeyboardButton("➕ Add Question", callback_data="add_question")]
+            )
+
+        keyboard_buttons.extend([
             [add_group_button],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
-        ]
+        ])
+
+        keyboard = keyboard_buttons
 
     else:
+
+        bot_username = context.bot.username
 
         keyboard = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
             [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
         ]
+
+        if question_enabled:
+            keyboard.append(
+                [InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")]
+            )
+
+        keyboard.extend([
+            [add_group_button],
+            [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
+            [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
+        ])
 
     await query.edit_message_text(
         text,
@@ -119,8 +163,6 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
-# ---------------- MAIN ---------------- #
 
 def main():
 
@@ -139,32 +181,40 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
 
+    # GROUP LIST COMMAND
     application.add_handler(CommandHandler("groups", groups))
 
     application.add_handler(
         CallbackQueryHandler(group_page_callback, pattern="^group_page_")
     )
 
+    # BACKUP
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
 
+    # RESET DATABASE
     application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
+    # IMPORT COMMANDS
     application.add_handler(CommandHandler("import", import_command))
     application.add_handler(CommandHandler("stopimport", stop_import))
 
+    # TXT FILE IMPORT
     application.add_handler(
         MessageHandler(filters.Document.FileExtension("txt"), import_txt_questions)
     )
 
+    # restore handler
     application.add_handler(
         MessageHandler(filters.Document.ALL, restore)
     )
 
+    # HELP BUTTON
     application.add_handler(
         CallbackQueryHandler(help_callback, pattern="^help$")
     )
 
+    # HELP PAGINATION
     application.add_handler(
         CallbackQueryHandler(help_page, pattern="^help_")
     )
@@ -195,14 +245,14 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # BOT ADD GROUP SAVE
+    # GROUP AUTO SAVE WHEN BOT ADDED
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
-    # MESSAGE DETECT GROUP SAVE
+    # GROUP AUTO SAVE WHEN MESSAGE COMES
     application.add_handler(
-        MessageHandler(filters.ALL & filters.ChatType.GROUPS, track_groups)
+        MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
 
     application.add_error_handler(error_handler)
