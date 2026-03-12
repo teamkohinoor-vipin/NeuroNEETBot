@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import connect_db, close_db
-from bot.scheduler import start_scheduler, send_quiz_to_group   # 👈 NEW import
+from bot.scheduler import start_scheduler, send_quiz_to_group
 from bot.database.models import add_group, get_config
 
 from bot.handlers.start import start, help_callback, help_page
@@ -85,17 +85,16 @@ async def track_groups(update: Update, context):
         await add_group(chat.id)
 
 
-# ===== NEW HANDLER: Bot added to group =====
+# ===== HANDLER: Bot added to group =====
 async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler when bot is added to a group."""
     result = update.my_chat_member
-    # Check if bot was added (status changed from left to member)
     if result.new_chat_member.status == "member" and result.old_chat_member.status == "left":
         chat_id = result.chat.id
         # Save group
         await add_group(chat_id)
 
-        # Send welcome message (group version, similar to start message for groups)
+        # Send welcome message (group version)
         bot_username = context.bot.username
         welcome_text = (
             "🧪 *Welcome to NeuroNEETBot!* 🧪\n\n"
@@ -107,7 +106,6 @@ async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "📊 *Scoring System*\n"
             "✅ Correct → +1 point\n"
             "❌ Wrong → -1 point\n\n"
-            "👇 *Use the buttons below:*"
         )
 
         add_group_button = InlineKeyboardButton(
@@ -130,7 +128,35 @@ async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-        # Send an immediate poll
+        # Check if bot is admin
+        try:
+            chat_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+            if chat_member.status in ["administrator", "creator"]:
+                # Bot is admin → send immediate poll
+                await send_quiz_to_group(chat_id, context.bot)
+            else:
+                # Bot is not admin → ask to promote
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⚠️ *Please make me admin with all permissions to send polls.*",
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.warning(f"Could not check admin status in {chat_id}: {e}")
+
+
+# ===== HANDLER: Bot's admin status changes =====
+async def bot_admin_status_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler when bot's admin rights are changed."""
+    result = update.my_chat_member
+    chat_id = result.chat.id
+    old_status = result.old_chat_member.status
+    new_status = result.new_chat_member.status
+
+    # Check if bot became admin (from non-admin to admin)
+    if old_status not in ["administrator", "creator"] and new_status in ["administrator", "creator"]:
+        logger.info(f"Bot promoted to admin in {chat_id}")
+        # Send a poll immediately
         await send_quiz_to_group(chat_id, context.bot)
 
 
@@ -278,9 +304,14 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # ===== NEW HANDLER for bot added to group =====
+    # ===== HANDLER: Bot added to group =====
     application.add_handler(
         ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
+    )
+
+    # ===== HANDLER: Bot admin status change =====
+    application.add_handler(
+        ChatMemberHandler(bot_admin_status_change, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
     # GROUP AUTO SAVE WHEN BOT ADDED (existing)
