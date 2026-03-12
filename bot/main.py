@@ -44,17 +44,25 @@ from bot.handlers.error import error_handler
 from bot.handlers.admin_stats import stats
 from bot.handlers.broadcast import broadcast
 
+# BACKUP
 from bot.handlers.backup import backup, restore
+
+# RESET DATABASE
 from bot.handlers.reset_database import reset_database_command
+
+# ADMIN PANEL
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
+# TXT IMPORT
 from bot.handlers.import_txt_questions import (
     import_command,
     stop_import,
     import_txt_questions
 )
 
+# GROUP LIST FEATURE
 from bot.handlers.groups import groups, group_page_callback
+
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -73,45 +81,13 @@ async def unmatched_callback(update: Update, context):
     )
 
 
-# ---------------- GROUP TRACKING ----------------
-
 async def track_groups(update: Update, context):
 
     chat = update.effective_chat
 
-    if not chat:
-        return
+    if chat and chat.type in ["group", "supergroup"]:
+        await add_group(chat.id)
 
-    if chat.type not in ["group", "supergroup"]:
-        return
-
-    chat_id = chat.id
-
-    # save group in database
-    await add_group(chat_id)
-
-    # if bot just added
-    if update.my_chat_member:
-
-        status = update.my_chat_member.new_chat_member.status
-
-        if status in ["member", "administrator"]:
-
-            try:
-
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="🧪 NeuroNEETBot Activated!\n\nFirst quiz coming now!"
-                )
-
-                from bot.scheduler import send_quiz
-                await send_quiz(context.bot)
-
-            except Exception as e:
-                logger.warning(f"Activation failed in {chat_id}: {e}")
-
-
-# ---------------- BACK TO MAIN ----------------
 
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -188,8 +164,6 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ---------------- MAIN ----------------
-
 def main():
 
     application = Application.builder().token(BOT_TOKEN).build()
@@ -207,32 +181,40 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
 
+    # GROUP LIST COMMAND
     application.add_handler(CommandHandler("groups", groups))
 
     application.add_handler(
         CallbackQueryHandler(group_page_callback, pattern="^group_page_")
     )
 
+    # BACKUP
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
 
+    # RESET DATABASE
     application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
+    # IMPORT COMMANDS
     application.add_handler(CommandHandler("import", import_command))
     application.add_handler(CommandHandler("stopimport", stop_import))
 
+    # TXT FILE IMPORT
     application.add_handler(
         MessageHandler(filters.Document.FileExtension("txt"), import_txt_questions)
     )
 
+    # restore handler
     application.add_handler(
         MessageHandler(filters.Document.ALL, restore)
     )
 
+    # HELP BUTTON
     application.add_handler(
         CallbackQueryHandler(help_callback, pattern="^help$")
     )
 
+    # HELP PAGINATION
     application.add_handler(
         CallbackQueryHandler(help_page, pattern="^help_")
     )
@@ -263,17 +245,14 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # GROUP AUTO SAVE SYSTEM
+    # GROUP AUTO SAVE WHEN BOT ADDED
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
+    # GROUP AUTO SAVE WHEN MESSAGE COMES
     application.add_handler(
         MessageHandler(filters.ChatType.GROUPS, track_groups)
-    )
-
-    application.add_handler(
-        CallbackQueryHandler(unmatched_callback)
     )
 
     application.add_error_handler(error_handler)
