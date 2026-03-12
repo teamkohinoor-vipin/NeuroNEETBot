@@ -61,11 +61,7 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_data = await get_user(user.id)
 
-    # ---- CRASH FIX ----
-    if not user_data:
-        total_points = 0
-    else:
-        total_points = user_data.get("total_points", 0)
+    total_points = user_data.get("total_points", 0)
 
     mention = f"@{user.username}" if user.username else user.first_name
 
@@ -73,15 +69,12 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = f"{mention} {emoji} {points_change:+d} | Total: {total_points}"
 
-    # check mention setting
+    # ✅ check mention setting
     mention_enabled = await get_config("answer_mentions", True)
 
     if mention_enabled:
 
-        msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=text
-        )
+        msg = await context.bot.send_message(chat_id=chat_id, text=text)
 
         if chat_id not in score_messages:
             score_messages[chat_id] = []
