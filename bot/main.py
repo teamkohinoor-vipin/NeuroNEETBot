@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import connect_db, close_db
-from bot.scheduler import start_scheduler
+from bot.scheduler import start_scheduler, send_quiz_to_group   # 👈 NEW import
 from bot.database.models import add_group, get_config
 
 from bot.handlers.start import start, help_callback, help_page
@@ -73,24 +73,68 @@ logger = logging.getLogger(__name__)
 
 
 async def unmatched_callback(update: Update, context):
-
     logger.warning(f"Unknown callback: {update.callback_query.data}")
-
     await update.callback_query.answer(
         "This button is not available. Use /start again."
     )
 
 
 async def track_groups(update: Update, context):
-
     chat = update.effective_chat
-
     if chat and chat.type in ["group", "supergroup"]:
         await add_group(chat.id)
 
 
-async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== NEW HANDLER: Bot added to group =====
+async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler when bot is added to a group."""
+    result = update.my_chat_member
+    # Check if bot was added (status changed from left to member)
+    if result.new_chat_member.status == "member" and result.old_chat_member.status == "left":
+        chat_id = result.chat.id
+        # Save group
+        await add_group(chat_id)
 
+        # Send welcome message (group version, similar to start message for groups)
+        bot_username = context.bot.username
+        welcome_text = (
+            "🧪 *Welcome to NeuroNEETBot!* 🧪\n\n"
+            "I can send automatic Random NEET quizzes every 5 minutes.\n\n"
+            "📚 *Subjects Covered*\n"
+            "⚛️ Physics\n"
+            "🧪 Chemistry\n"
+            "🧬 Biology\n\n"
+            "📊 *Scoring System*\n"
+            "✅ Correct → +1 point\n"
+            "❌ Wrong → -1 point\n\n"
+            "👇 *Use the buttons below:*"
+        )
+
+        add_group_button = InlineKeyboardButton(
+            "📢 Add Bot to Group",
+            url=f"https://t.me/{bot_username}?startgroup=true"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("❓ Help", callback_data="help")],
+            [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
+            [add_group_button],
+            [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
+            [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
+        ]
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=welcome_text,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        # Send an immediate poll
+        await send_quiz_to_group(chat_id, context.bot)
+
+
+async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
@@ -119,38 +163,29 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if chat_type == "private":
-
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
         ]
-
         if question_enabled:
             keyboard_buttons.append(
                 [InlineKeyboardButton("➕ Add Question", callback_data="add_question")]
             )
-
         keyboard_buttons.extend([
             [add_group_button],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
             [InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{SUPPORT_CHANNEL}")]
         ])
-
         keyboard = keyboard_buttons
-
     else:
-
         bot_username = context.bot.username
-
         keyboard = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
             [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard_menu")],
         ]
-
         if question_enabled:
             keyboard.append(
                 [InlineKeyboardButton("➕ Add Question (Private)", url=f"https://t.me/{bot_username}?start=add")]
             )
-
         keyboard.extend([
             [add_group_button],
             [InlineKeyboardButton("👨‍💻 Developer", url=f"https://t.me/{DEVELOPER_USERNAME}")],
@@ -165,7 +200,6 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-
     application = Application.builder().token(BOT_TOKEN).build()
 
     application.post_init = connect_db
@@ -183,7 +217,6 @@ def main():
 
     # GROUP LIST COMMAND
     application.add_handler(CommandHandler("groups", groups))
-
     application.add_handler(
         CallbackQueryHandler(group_page_callback, pattern="^group_page_")
     )
@@ -245,7 +278,12 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # GROUP AUTO SAVE WHEN BOT ADDED
+    # ===== NEW HANDLER for bot added to group =====
+    application.add_handler(
+        ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
+    )
+
+    # GROUP AUTO SAVE WHEN BOT ADDED (existing)
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
