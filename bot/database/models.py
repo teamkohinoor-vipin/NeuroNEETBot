@@ -2,6 +2,9 @@ from datetime import datetime
 from bot.database.db import db
 from bson import ObjectId
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_question(text: str):
@@ -15,9 +18,7 @@ async def get_user(user_id: int):
     return await db.db.users.find_one({"user_id": user_id})
 
 
-# ✅ FIXED – अब username दो बार set नहीं होगा
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
-    # पहले user को create करो (अगर नहीं है तो)
     await db.db.users.update_one(
         {"user_id": user_id},
         {
@@ -33,7 +34,6 @@ async def update_user_stats(user_id: int, username: str, correct: bool, chapter:
         upsert=True
     )
 
-    # अब points increment करो
     update = {
         "$inc": {
             "total_correct" if correct else "total_wrong": 1,
@@ -45,9 +45,7 @@ async def update_user_stats(user_id: int, username: str, correct: bool, chapter:
 
 
 async def get_top_users(chat_id: int, limit: int = 10, since: datetime = None):
-
     match = {"chat_id": chat_id}
-
     if since:
         match["timestamp"] = {"$gte": since}
 
@@ -61,7 +59,6 @@ async def get_top_users(chat_id: int, limit: int = 10, since: datetime = None):
         {"$sort": {"points": -1}},
         {"$limit": limit}
     ]
-
     cursor = db.db.answers.aggregate(pipeline)
     return await cursor.to_list(length=limit)
 
@@ -71,63 +68,59 @@ async def add_question(question_data: dict):
     return result.inserted_id
 
 
+# ✅ FIXED – Random question with proper used‑questions tracking
 async def get_random_question(subject: str, chat_id: int):
-
+    # Get all used question IDs for this group (distinct)
     used_ids = []
-
     cursor = db.db.poll_logs.find(
         {"chat_id": chat_id},
         {"question_id": 1}
-    ).limit(10000)
-
+    )
     async for doc in cursor:
-        used_ids.append(doc["question_id"])
+        if doc["question_id"] not in used_ids:
+            used_ids.append(doc["question_id"])
 
-    pipeline = [
-        {
-            "$match": {
-                "subject": subject,
-                "approved": True,
-                "_id": {"$nin": used_ids}
-            }
-        },
-        {"$sample": {"size": 1}}
+    # Count unused approved questions for this subject
+    count_pipeline = [
+        {"$match": {"subject": subject, "approved": True, "_id": {"$nin": used_ids}}},
+        {"$count": "total"}
     ]
+    count_cursor = db.db.questions.aggregate(count_pipeline)
+    count_result = await count_cursor.to_list(length=1)
+    unused_count = count_result[0]["total"] if count_result else 0
 
-    cursor = db.db.questions.aggregate(pipeline)
-    questions = await cursor.to_list(length=1)
-
-    if not questions:
-
+    if unused_count > 0:
+        # There are unused questions – pick one randomly
+        pipeline = [
+            {"$match": {"subject": subject, "approved": True, "_id": {"$nin": used_ids}}},
+            {"$sample": {"size": 1}}
+        ]
+        cursor = db.db.questions.aggregate(pipeline)
+        questions = await cursor.to_list(length=1)
+        return questions[0] if questions else None
+    else:
+        # All questions of this subject have been used – fallback to any approved question
+        logger.info(f"All questions for subject {subject} in group {chat_id} have been used. Repeating...")
         pipeline = [
             {"$match": {"subject": subject, "approved": True}},
             {"$sample": {"size": 1}}
         ]
-
         cursor = db.db.questions.aggregate(pipeline)
         questions = await cursor.to_list(length=1)
-
-    return questions[0] if questions else None
+        return questions[0] if questions else None
 
 
 async def question_exists(question_text: str):
-
     normalized = normalize_question(question_text)
-
     cursor = db.db.questions.find({}, {"question": 1})
-
     async for q in cursor:
-
         existing = normalize_question(q["question"])
-
         if existing == normalized:
             return True
-
     return False
 
 
 async def create_pending_batch(user_id: int, subject: str, class_: int, chapter: str):
-
     batch = {
         "user_id": user_id,
         "subject": subject,
@@ -137,13 +130,11 @@ async def create_pending_batch(user_id: int, subject: str, class_: int, chapter:
         "status": "pending",
         "created_at": datetime.utcnow()
     }
-
     result = await db.db.pending_batches.insert_one(batch)
     return result.inserted_id
 
 
 async def add_question_to_batch(batch_id: ObjectId, question: dict):
-
     await db.db.pending_batches.update_one(
         {"_id": batch_id},
         {"$push": {"questions": question}}
@@ -151,12 +142,10 @@ async def add_question_to_batch(batch_id: ObjectId, question: dict):
 
 
 async def get_pending_batch(batch_id: ObjectId):
-
     return await db.db.pending_batches.find_one({"_id": batch_id})
 
 
 async def update_batch_status(batch_id: ObjectId, status: str):
-
     await db.db.pending_batches.update_one(
         {"_id": batch_id},
         {"$set": {"status": status}}
@@ -164,7 +153,6 @@ async def update_batch_status(batch_id: ObjectId, status: str):
 
 
 async def log_poll(poll_id: int, message_id: int, question_id: ObjectId, subject: str, chapter: str, chat_id: int):
-
     await db.db.poll_logs.insert_one({
         "poll_id": poll_id,
         "message_id": message_id,
@@ -181,17 +169,13 @@ async def get_poll_log(poll_id: int):
 
 
 async def get_question_by_poll(poll_id: int):
-
     log = await get_poll_log(poll_id)
-
     if log:
         return await db.db.questions.find_one({"_id": log["question_id"]})
-
     return None
 
 
 async def record_answer(user_id: int, username: str, question_id: ObjectId, points_change: int, chat_id: int):
-
     await db.db.answers.insert_one({
         "user_id": user_id,
         "username": username,
@@ -203,7 +187,6 @@ async def record_answer(user_id: int, username: str, question_id: ObjectId, poin
 
 
 async def add_group(chat_id: int):
-
     await db.db.groups.update_one(
         {"chat_id": chat_id},
         {"$set": {"chat_id": chat_id}},
@@ -212,26 +195,21 @@ async def add_group(chat_id: int):
 
 
 async def remove_group(chat_id: int):
-
     await db.db.groups.delete_one({"chat_id": chat_id})
 
 
 async def get_all_groups():
-
     cursor = db.db.groups.find({})
     groups = await cursor.to_list(length=None)
-
     return [g["chat_id"] for g in groups]
 
 
 async def get_config(key: str, default=None):
-
     doc = await db.db.config.find_one({"_id": key})
     return doc["value"] if doc else default
 
 
 async def set_config(key: str, value):
-
     await db.db.config.update_one(
         {"_id": key},
         {"$set": {"value": value}},
@@ -239,9 +217,7 @@ async def set_config(key: str, value):
     )
 
 
-# ---------------- RESET DATABASE FUNCTION ----------------
 async def reset_database():
-
     questions = await db.db.questions.delete_many({})
     poll_logs = await db.db.poll_logs.delete_many({})
     answers = await db.db.answers.delete_many({})
