@@ -20,32 +20,37 @@ last_polls = {}
 SUBJECTS = ["Physics", "Chemistry", "Biology"]
 
 
-# ===== NEW FUNCTION: send quiz to a specific group =====
 async def send_quiz_to_group(chat_id: int, bot: Bot):
-    """Send a quiz to a specific group."""
+
     try:
+
         subject = random.choice(SUBJECTS)
+
         question = await get_random_question(subject, chat_id)
+
         if not question:
             logger.warning(f"No question found for {subject} in group {chat_id}")
             return
+
         options = question["options"]
         correct_option_id = question["correct_index"]
 
-        # delete previous poll for this group if any
+        # delete previous poll
         if chat_id in last_polls:
             try:
                 await bot.delete_message(chat_id, last_polls[chat_id])
             except:
                 pass
 
-        # delete old score messages
+        # delete score messages
         if chat_id in score_messages:
+
             for msg_id in score_messages[chat_id]:
                 try:
                     await bot.delete_message(chat_id, msg_id)
                 except:
                     pass
+
             score_messages[chat_id] = []
 
         message = await bot.send_poll(
@@ -56,6 +61,7 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
             correct_option_id=correct_option_id,
             is_anonymous=False
         )
+
         last_polls[chat_id] = message.message_id
 
         await log_poll(
@@ -66,22 +72,26 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
             chapter=question["chapter"],
             chat_id=chat_id
         )
+
     except Exception as e:
         logger.warning(f"Quiz failed in group {chat_id}: {e}")
 
 
-# ===== EXISTING FUNCTION (modified to use new function optionally) =====
 async def send_quiz(bot: Bot):
+
     groups = await get_all_groups()
+
     for chat_id in groups:
-        # Reuse the new function
+
         await send_quiz_to_group(chat_id, bot)
-        # Telegram rate-limit protection
+
         await asyncio.sleep(0.7)
+
     logger.info("Quiz sent to all groups")
 
 
 async def start_scheduler(bot: Bot):
+
     if scheduler.running:
         logger.info("Scheduler already running")
         return
@@ -103,4 +113,5 @@ async def start_scheduler(bot: Bot):
     )
 
     scheduler.start()
+
     logger.info("⏰ Scheduler started")
