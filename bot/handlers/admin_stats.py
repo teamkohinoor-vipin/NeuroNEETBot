@@ -3,24 +3,31 @@ from telegram.ext import ContextTypes
 from telegram.error import Forbidden, BadRequest
 from bot.database.db import db
 from bot.config import ADMIN_ID
+import asyncio
 
 
-# 🔥 REAL USER COUNT + AUTO CLEAN
+# 🔥 FAST USER COUNT (NO FREEZE)
 async def get_real_user_count(context):
+
+    users = await db.db.users.count_documents({})
+    return users
+
+
+# 🔥 BACKGROUND CLEAN (SAFE)
+async def clean_fake_users(context):
 
     cursor = db.db.users.find({}, {"user_id": 1})
 
-    real = 0
-
     async for u in cursor:
         try:
-            await context.bot.get_chat(u["user_id"])
-            real += 1
-
+            await asyncio.wait_for(
+                context.bot.get_chat(u["user_id"]),
+                timeout=2
+            )
         except (Forbidden, BadRequest):
             await db.db.users.delete_one({"user_id": u["user_id"]})
-
-    return real
+        except:
+            continue
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -47,3 +54,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text(text)
+
+    # 🔁 background cleanup (NO FREEZE)
+    asyncio.create_task(clean_fake_users(context))
