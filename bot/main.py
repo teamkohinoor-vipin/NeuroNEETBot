@@ -42,7 +42,9 @@ from bot.handlers.admin import admin_callback
 from bot.handlers.error import error_handler
 
 from bot.handlers.admin_stats import stats
-from bot.handlers.broadcast import broadcast
+
+# 🔥 UPDATED IMPORT (ONLY CHANGE)
+from bot.handlers.broadcast import broadcast, group_broadcast, stopbroadcast
 
 # BACKUP
 from bot.handlers.backup import backup, restore
@@ -213,7 +215,11 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
+
+    # 🔥 BROADCAST SYSTEM (ADDED ONLY)
     application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("groups", group_broadcast))
+    application.add_handler(CommandHandler("stopbroadcast", stopbroadcast))
 
     # GROUP LIST COMMAND (FIXED)
     application.add_handler(CommandHandler("links", links))
