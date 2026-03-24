@@ -6,11 +6,9 @@ from bot.database.db import db
 from bot.database.models import get_all_groups
 import asyncio
 
-# 🔴 GLOBAL FLAG
 broadcast_running = False
 
 
-# 🔘 BUTTONS
 def get_buttons():
     keyboard = [
         [InlineKeyboardButton("➕ Add Bot", url="https://t.me/NeuroNEETBot?startgroup=true")],
@@ -19,7 +17,6 @@ def get_buttons():
     return InlineKeyboardMarkup(keyboard)
 
 
-# 🔥 FIXED SEND (AUTO CLEAN USERS)
 async def send_message_with_buttons(context, chat_id, msg):
     try:
         await context.bot.copy_message(
@@ -42,7 +39,6 @@ async def send_message_with_buttons(context, chat_id, msg):
         return False
 
 
-# ================= USER BROADCAST =================
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     global broadcast_running
@@ -62,7 +58,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = update.message.reply_to_message
 
-    # 🔥 OPTIMIZED USER FETCH
     cursor = db.db.users.find({}, {"user_id": 1})
     users = []
     async for u in cursor:
@@ -71,7 +66,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent = 0
     failed = 0
 
-    batch_size = 20   # 🔥 FIXED
+    batch_size = 20
 
     await update.message.reply_text(f"🚀 User Broadcast Started\n👥 Total Users: {len(users)}")
 
@@ -107,7 +102,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================= GROUP BROADCAST =================
 async def group_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     global broadcast_running
@@ -131,7 +125,7 @@ async def group_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent = 0
     failed = 0
 
-    batch_size = 20   # 🔥 FIXED
+    batch_size = 20
 
     await update.message.reply_text(f"🚀 Group Broadcast Started\n👥 Total Groups: {len(groups)}")
 
@@ -167,7 +161,6 @@ async def group_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================= STOP =================
 async def stopbroadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     global broadcast_running
@@ -181,4 +174,4 @@ async def stopbroadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     broadcast_running = False
 
-    await update.message.reply_text("🛑 Broadcast stopping..."
+    await update.message.reply_text("🛑 Broadcast stopping...")
