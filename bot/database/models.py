@@ -73,14 +73,20 @@ async def add_question(question_data: dict):
     return result.inserted_id
 
 
-# ✅ NO REPEAT QUESTION SYSTEM
+# ✅ FINAL NO-REPEAT SYSTEM (FAST + SAFE)
 async def get_random_question(subject: str, chat_id: int):
 
+    # 🔥 fast distinct (no loop)
     used_ids = await db.db.poll_logs.distinct(
         "question_id",
         {"chat_id": chat_id, "subject": subject}
     )
 
+    # ⚡ LIMIT used_ids size (VERY IMPORTANT FIX)
+    if len(used_ids) > 5000:
+        used_ids = used_ids[-5000:]
+
+    # 🎯 try unused question
     pipeline = [
         {
             "$match": {
@@ -93,12 +99,12 @@ async def get_random_question(subject: str, chat_id: int):
     ]
 
     cursor = db.db.questions.aggregate(pipeline)
-
     questions = await cursor.to_list(length=1)
 
     if questions:
         return questions[0]
 
+    # 🔁 fallback (restart cycle)
     logger.info(f"All questions used for {subject} in group {chat_id}, restarting cycle")
 
     pipeline = [
@@ -112,7 +118,6 @@ async def get_random_question(subject: str, chat_id: int):
     ]
 
     cursor = db.db.questions.aggregate(pipeline)
-
     questions = await cursor.to_list(length=1)
 
     return questions[0] if questions else None
@@ -125,9 +130,7 @@ async def question_exists(question_text: str):
     cursor = db.db.questions.find({}, {"question": 1})
 
     async for q in cursor:
-
         existing = normalize_question(q["question"])
-
         if existing == normalized:
             return True
 
@@ -159,7 +162,6 @@ async def add_question_to_batch(batch_id: ObjectId, question: dict):
 
 
 async def get_pending_batch(batch_id: ObjectId):
-
     return await db.db.pending_batches.find_one({"_id": batch_id})
 
 
@@ -220,14 +222,12 @@ async def add_group(chat_id: int):
 
 
 async def remove_group(chat_id: int):
-
     await db.db.groups.delete_one({"chat_id": chat_id})
 
 
 async def get_all_groups():
 
     cursor = db.db.groups.find({})
-
     groups = await cursor.to_list(length=None)
 
     return [g["chat_id"] for g in groups]
@@ -236,7 +236,6 @@ async def get_all_groups():
 async def get_config(key: str, default=None):
 
     doc = await db.db.config.find_one({"_id": key})
-
     return doc["value"] if doc else default
 
 
