@@ -18,19 +18,18 @@ def get_buttons():
     return InlineKeyboardMarkup(keyboard)
 
 
-# 🔥 SAFE SEND (copy + buttons)
+# 🔥 FIXED SEND (SINGLE MESSAGE)
 async def send_message_with_buttons(context, chat_id, msg):
     try:
-        await msg.copy(chat_id=chat_id)
-
-        await context.bot.send_message(
+        await context.bot.copy_message(
             chat_id=chat_id,
-            text="👇 Join Now",
-            reply_markup=get_buttons()
+            from_chat_id=msg.chat_id,
+            message_id=msg.message_id,
+            reply_markup=get_buttons()   # ✅ button same message में
         )
-
         return True
-    except:
+
+    except Exception:
         return False
 
 
@@ -58,7 +57,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent = 0
     failed = 0
 
-    batch_size = 60  # 🔥 ULTRA FAST
+    batch_size = 60
 
     await update.message.reply_text("🚀 User Broadcast Started")
 
@@ -82,7 +81,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 failed += 1
 
-        await asyncio.sleep(0.1)  # 🔥 FAST DELAY
+        await asyncio.sleep(0.1)
 
     broadcast_running = False
 
@@ -117,7 +116,7 @@ async def group_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent = 0
     failed = 0
 
-    batch_size = 50  # 🔥 ULTRA FAST GROUP
+    batch_size = 50
 
     await update.message.reply_text("🚀 Group Broadcast Started")
 
