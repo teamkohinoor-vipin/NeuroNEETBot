@@ -16,7 +16,6 @@ async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("⏳ Loading group links...")
 
-    # background load (bot freeze नहीं होगा)
     asyncio.create_task(load_links(update, context))
 
 
@@ -44,14 +43,13 @@ async def send_link_page(update, context, page):
 
     groups_slice = group_ids[start:end]
 
-    text = "📢 *Bot Group Links*\n\n"
+    text = "📢 Bot Group Links\n\n"   # ❌ Markdown हटाया
 
     for chat_id in groups_slice:
 
         try:
             chat = await context.bot.get_chat(chat_id)
 
-            # 🔥 CHECK DB FIRST
             group_data = await db.db.groups.find_one({"chat_id": chat_id})
 
             if group_data and group_data.get("invite_link"):
@@ -60,7 +58,6 @@ async def send_link_page(update, context, page):
                 try:
                     link = await context.bot.export_chat_invite_link(chat_id)
 
-                    # SAVE LINK
                     await db.db.groups.update_one(
                         {"chat_id": chat_id},
                         {"$set": {"invite_link": link}},
@@ -69,10 +66,10 @@ async def send_link_page(update, context, page):
                 except:
                     link = "No invite link permission"
 
-            # ===== FORMAT =====
+            # ✅ SAFE TEXT (no markdown)
             text += f"{chat.title}\n{link}\n\n"
 
-            await asyncio.sleep(0.05)  # anti-rate limit
+            await asyncio.sleep(0.03)   # ⚡ faster
 
         except:
             continue
@@ -99,14 +96,12 @@ async def send_link_page(update, context, page):
     if update.callback_query:
         await update.callback_query.edit_message_text(
             text,
-            parse_mode="Markdown",
             reply_markup=reply_markup,
             disable_web_page_preview=True
         )
     else:
         await update.message.reply_text(
             text,
-            parse_mode="Markdown",
             reply_markup=reply_markup,
             disable_web_page_preview=True
         )
