@@ -1,5 +1,6 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
+from telegram.error import Forbidden, BadRequest
 from bot.config import ADMIN_ID
 from bot.database.db import db
 from bot.database.models import get_all_groups
@@ -18,16 +19,24 @@ def get_buttons():
     return InlineKeyboardMarkup(keyboard)
 
 
-# 🔥 FIXED SEND (SINGLE MESSAGE)
+# 🔥 FIXED SEND (AUTO CLEAN USERS)
 async def send_message_with_buttons(context, chat_id, msg):
     try:
         await context.bot.copy_message(
             chat_id=chat_id,
             from_chat_id=msg.chat_id,
             message_id=msg.message_id,
-            reply_markup=get_buttons()   # ✅ button same message में
+            reply_markup=get_buttons()
         )
         return True
+
+    except Forbidden:
+        await db.db.users.delete_one({"user_id": chat_id})
+        return False
+
+    except BadRequest:
+        await db.db.users.delete_one({"user_id": chat_id})
+        return False
 
     except Exception:
         return False
@@ -52,14 +61,19 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     broadcast_running = True
 
     msg = update.message.reply_to_message
-    users = await db.db.users.find({}).to_list(length=None)
+
+    # 🔥 OPTIMIZED USER FETCH
+    cursor = db.db.users.find({}, {"user_id": 1})
+    users = []
+    async for u in cursor:
+        users.append(u)
 
     sent = 0
     failed = 0
 
-    batch_size = 60
+    batch_size = 20   # 🔥 FIXED
 
-    await update.message.reply_text("🚀 User Broadcast Started")
+    await update.message.reply_text(f"🚀 User Broadcast Started\n👥 Total Users: {len(users)}")
 
     for i in range(0, len(users), batch_size):
 
@@ -68,10 +82,11 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         batch = users[i:i + batch_size]
 
-        tasks = [
-            send_message_with_buttons(context, user["user_id"], msg)
-            for user in batch
-        ]
+        tasks = []
+        for user in batch:
+            if not broadcast_running:
+                break
+            tasks.append(send_message_with_buttons(context, user["user_id"], msg))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -81,7 +96,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 failed += 1
 
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
 
     broadcast_running = False
 
@@ -116,9 +131,9 @@ async def group_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent = 0
     failed = 0
 
-    batch_size = 50
+    batch_size = 20   # 🔥 FIXED
 
-    await update.message.reply_text("🚀 Group Broadcast Started")
+    await update.message.reply_text(f"🚀 Group Broadcast Started\n👥 Total Groups: {len(groups)}")
 
     for i in range(0, len(groups), batch_size):
 
@@ -127,10 +142,11 @@ async def group_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         batch = groups[i:i + batch_size]
 
-        tasks = [
-            send_message_with_buttons(context, chat_id, msg)
-            for chat_id in batch
-        ]
+        tasks = []
+        for chat_id in batch:
+            if not broadcast_running:
+                break
+            tasks.append(send_message_with_buttons(context, chat_id, msg))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -140,7 +156,7 @@ async def group_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 failed += 1
 
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.05)
 
     broadcast_running = False
 
@@ -165,4 +181,4 @@ async def stopbroadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     broadcast_running = False
 
-    await update.message.reply_text("🛑 Broadcast stopping...")
+    await update.message.reply_text("🛑 Broadcast stopping..."
