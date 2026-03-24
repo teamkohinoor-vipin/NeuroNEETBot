@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import connect_db, close_db
-from bot.scheduler import start_scheduler, send_quiz_to_group   # 👈 NEW import
+from bot.scheduler import start_scheduler, send_quiz_to_group
 from bot.database.models import add_group, get_config
 
 from bot.handlers.start import start, help_callback, help_page
@@ -60,8 +60,11 @@ from bot.handlers.import_txt_questions import (
     import_txt_questions
 )
 
-# GROUP LIST FEATURE
+# 👇 OLD import (unchanged, remove नहीं किया)
 from bot.handlers.groups import groups, group_page_callback
+
+# ✅ NEW IMPORT (ADD ONLY)
+from bot.handlers.links import links, link_page_callback
 
 
 logging.basicConfig(
@@ -87,15 +90,12 @@ async def track_groups(update: Update, context):
 
 # ===== NEW HANDLER: Bot added to group =====
 async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler when bot is added to a group."""
     result = update.my_chat_member
-    # Check if bot was added (status changed from left to member)
+
     if result.new_chat_member.status == "member" and result.old_chat_member.status == "left":
         chat_id = result.chat.id
-        # Save group
         await add_group(chat_id)
 
-        # Send welcome message (group version, similar to start message for groups)
         bot_username = context.bot.username
         welcome_text = (
             "🧪 *Welcome to NeuroNEETBot!* 🧪\n\n"
@@ -130,7 +130,6 @@ async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-        # Send an immediate poll
         await send_quiz_to_group(chat_id, context.bot)
 
 
@@ -215,10 +214,10 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
 
-    # GROUP LIST COMMAND
-    application.add_handler(CommandHandler("groups", groups))
+    # 🔁 UPDATED COMMAND (groups → links)
+    application.add_handler(CommandHandler("links", links))
     application.add_handler(
-        CallbackQueryHandler(group_page_callback, pattern="^group_page_")
+        CallbackQueryHandler(link_page_callback, pattern="^link_page_")
     )
 
     # BACKUP
@@ -232,22 +231,18 @@ def main():
     application.add_handler(CommandHandler("import", import_command))
     application.add_handler(CommandHandler("stopimport", stop_import))
 
-    # TXT FILE IMPORT
     application.add_handler(
         MessageHandler(filters.Document.FileExtension("txt"), import_txt_questions)
     )
 
-    # restore handler
     application.add_handler(
         MessageHandler(filters.Document.ALL, restore)
     )
 
-    # HELP BUTTON
     application.add_handler(
         CallbackQueryHandler(help_callback, pattern="^help$")
     )
 
-    # HELP PAGINATION
     application.add_handler(
         CallbackQueryHandler(help_page, pattern="^help_")
     )
@@ -278,17 +273,14 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # ===== NEW HANDLER for bot added to group =====
     application.add_handler(
         ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
-    # GROUP AUTO SAVE WHEN BOT ADDED (existing)
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
-    # GROUP AUTO SAVE WHEN MESSAGE COMES
     application.add_handler(
         MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
