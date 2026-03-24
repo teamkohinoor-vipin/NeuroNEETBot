@@ -215,7 +215,6 @@ def main():
     application.add_handler(CommandHandler("links", links))
     application.add_handler(
         CallbackQueryHandler(link_page_callback, pattern="^links_page_")
-    )
 
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
