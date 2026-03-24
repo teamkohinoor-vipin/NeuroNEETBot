@@ -33,6 +33,14 @@ async def load_links(update, context):
     await send_link_page(update, context, page=0)
 
 
+# ===== SAFE GET CHAT =====
+async def safe_get_chat(context, chat_id):
+    try:
+        return await asyncio.wait_for(context.bot.get_chat(chat_id), timeout=2)
+    except:
+        return None
+
+
 # ===== PAGE SYSTEM =====
 async def send_link_page(update, context, page):
 
@@ -43,36 +51,38 @@ async def send_link_page(update, context, page):
 
     groups_slice = group_ids[start:end]
 
-    text = "📢 Bot Group Links\n\n"   # ❌ Markdown हटाया
+    text = "📢 Bot Group Links\n\n"
 
     for chat_id in groups_slice:
 
-        try:
-            chat = await context.bot.get_chat(chat_id)
+        chat = await safe_get_chat(context, chat_id)
 
-            group_data = await db.db.groups.find_one({"chat_id": chat_id})
-
-            if group_data and group_data.get("invite_link"):
-                link = group_data["invite_link"]
-            else:
-                try:
-                    link = await context.bot.export_chat_invite_link(chat_id)
-
-                    await db.db.groups.update_one(
-                        {"chat_id": chat_id},
-                        {"$set": {"invite_link": link}},
-                        upsert=True
-                    )
-                except:
-                    link = "No invite link permission"
-
-            # ✅ SAFE TEXT (no markdown)
-            text += f"{chat.title}\n{link}\n\n"
-
-            await asyncio.sleep(0.03)   # ⚡ faster
-
-        except:
+        if not chat:
             continue
+
+        group_data = await db.db.groups.find_one({"chat_id": chat_id})
+
+        if group_data and group_data.get("invite_link"):
+            link = group_data["invite_link"]
+        else:
+            try:
+                link = await asyncio.wait_for(
+                    context.bot.export_chat_invite_link(chat_id),
+                    timeout=2
+                )
+
+                await db.db.groups.update_one(
+                    {"chat_id": chat_id},
+                    {"$set": {"invite_link": link}},
+                    upsert=True
+                )
+            except:
+                link = "No invite link permission"
+
+        text += f"{chat.title}\n{link}\n\n"
+
+        await asyncio.sleep(0.05)
+
 
     # ===== BUTTONS =====
     keyboard = []
@@ -93,18 +103,21 @@ async def send_link_page(update, context, page):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if update.callback_query:
-        await update.callback_query.edit_message_text(
-            text,
-            reply_markup=reply_markup,
-            disable_web_page_preview=True
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=reply_markup,
-            disable_web_page_preview=True
-        )
+    try:
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
+        else:
+            await update.message.reply_text(
+                text,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
+    except:
+        pass
 
 
 # ===== CALLBACK =====
