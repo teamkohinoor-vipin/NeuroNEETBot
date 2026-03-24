@@ -2,14 +2,25 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from bot.database.models import get_all_groups
 from bot.config import ADMIN_ID
+from bot.database.db import db
+import asyncio
 
 GROUPS_PER_PAGE = 6
 
 
-async def groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# 🔥 MAIN COMMAND (/links)
+async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.effective_user.id != ADMIN_ID:
         return
+
+    await update.message.reply_text("⏳ Loading links...")
+
+    asyncio.create_task(load_links(update, context))
+
+
+# 🔥 LOAD GROUPS
+async def load_links(update, context):
 
     group_ids = await get_all_groups()
 
@@ -19,10 +30,11 @@ async def groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["groups_list"] = group_ids
 
-    await send_group_page(update, context, page=0)
+    await send_link_page(update, context, page=0)
 
 
-async def send_group_page(update, context, page):
+# 🔥 PAGE SYSTEM
+async def send_link_page(update, context, page):
 
     group_ids = context.user_data.get("groups_list", [])
 
@@ -31,36 +43,52 @@ async def send_group_page(update, context, page):
 
     groups_slice = group_ids[start:end]
 
-    text = "📢 *Bot Groups*\n\n"
+    text = "📢 *Bot Group Links*\n\n"
 
     for chat_id in groups_slice:
 
         try:
-
             chat = await context.bot.get_chat(chat_id)
 
-            try:
-                link = await context.bot.export_chat_invite_link(chat_id)
-            except:
-                link = "No invite link permission"
+            # 🔥 CHECK DB FIRST
+            group_data = await db.db.groups.find_one({"chat_id": chat_id})
+
+            if group_data and group_data.get("invite_link"):
+                link = group_data["invite_link"]
+
+            else:
+                try:
+                    link = await context.bot.export_chat_invite_link(chat_id)
+
+                    # 💾 SAVE IN DB
+                    await db.db.groups.update_one(
+                        {"chat_id": chat_id},
+                        {"$set": {"invite_link": link}},
+                        upsert=True
+                    )
+
+                except:
+                    link = "No invite link permission"
 
             text += f"• {chat.title}\n{link}\n\n"
+
+            await asyncio.sleep(0.05)
 
         except:
             continue
 
+    # 🔘 BUTTONS
     keyboard = []
-
     nav_buttons = []
 
     if page > 0:
         nav_buttons.append(
-            InlineKeyboardButton("⬅️ Back", callback_data=f"group_page_{page-1}")
+            InlineKeyboardButton("⬅️ Back", callback_data=f"link_page_{page-1}")
         )
 
     if end < len(group_ids):
         nav_buttons.append(
-            InlineKeyboardButton("Next ➡️", callback_data=f"group_page_{page+1}")
+            InlineKeyboardButton("Next ➡️", callback_data=f"link_page_{page+1}")
         )
 
     if nav_buttons:
@@ -87,11 +115,12 @@ async def send_group_page(update, context, page):
         )
 
 
-async def group_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# 🔥 PAGINATION CALLBACK
+async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
 
     page = int(query.data.split("_")[-1])
 
-    await send_group_page(update, context, page)
+    await send_link_page(update, context, page)
