@@ -60,10 +60,7 @@ from bot.handlers.import_txt_questions import (
     import_txt_questions
 )
 
-# 👇 OLD import (unchanged, remove नहीं किया)
-from bot.handlers.groups import groups, group_page_callback
-
-# ✅ NEW IMPORT (ADD ONLY)
+# 🔥 UPDATED IMPORT (groups → links)
 from bot.handlers.links import links, link_page_callback
 
 
@@ -88,7 +85,7 @@ async def track_groups(update: Update, context):
         await add_group(chat.id)
 
 
-# ===== NEW HANDLER: Bot added to group =====
+# ===== BOT ADDED HANDLER =====
 async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.my_chat_member
 
@@ -97,6 +94,7 @@ async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await add_group(chat_id)
 
         bot_username = context.bot.username
+
         welcome_text = (
             "🧪 *Welcome to NeuroNEETBot!* 🧪\n\n"
             "I can send automatic Random NEET quizzes every 5 minutes.\n\n"
@@ -214,20 +212,17 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
 
-    # 🔁 UPDATED COMMAND (groups → links)
+    # 🔥 UPDATED COMMAND
     application.add_handler(CommandHandler("links", links))
     application.add_handler(
         CallbackQueryHandler(link_page_callback, pattern="^link_page_")
     )
 
-    # BACKUP
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
 
-    # RESET DATABASE
     application.add_handler(CommandHandler("resetdatabase", reset_database_command))
 
-    # IMPORT COMMANDS
     application.add_handler(CommandHandler("import", import_command))
     application.add_handler(CommandHandler("stopimport", stop_import))
 
