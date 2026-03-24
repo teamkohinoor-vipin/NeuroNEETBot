@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import connect_db, close_db
-from bot.scheduler import start_scheduler, send_quiz_to_group
+from bot.scheduler import start_scheduler, send_quiz_to_group   # 👈 NEW import
 from bot.database.models import add_group, get_config
 
 from bot.handlers.start import start, help_callback, help_page
@@ -43,21 +43,26 @@ from bot.handlers.error import error_handler
 
 from bot.handlers.admin_stats import stats
 
+# 🔥 UPDATED IMPORT (ONLY CHANGE)
 from bot.handlers.broadcast import broadcast, group_broadcast, stopbroadcast
 
+# BACKUP
 from bot.handlers.backup import backup, restore
 
+# RESET DATABASE
 from bot.handlers.reset_database import reset_database_command
 
+# ADMIN PANEL
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
 
+# TXT IMPORT
 from bot.handlers.import_txt_questions import (
     import_command,
     stop_import,
     import_txt_questions
 )
 
-# ✅ FIXED IMPORT
+# GROUP LIST FEATURE (FIXED)
 from bot.handlers.links import links, link_page_callback
 
 
@@ -82,12 +87,11 @@ async def track_groups(update: Update, context):
         await add_group(chat.id)
 
 
+# ===== NEW HANDLER: Bot added to group =====
 async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.my_chat_member
-
     if result.new_chat_member.status == "member" and result.old_chat_member.status == "left":
         chat_id = result.chat.id
-
         await add_group(chat_id)
 
         bot_username = context.bot.username
@@ -211,10 +215,11 @@ def main():
     application.add_handler(CommandHandler("groups", group_broadcast))
     application.add_handler(CommandHandler("stopbroadcast", stopbroadcast))
 
-    # ✅ FIXED SECTION
+    # ✅ ONLY CHANGE HERE
     application.add_handler(CommandHandler("links", links))
     application.add_handler(
         CallbackQueryHandler(link_page_callback, pattern="^links_page_")
+    )
 
     application.add_handler(CommandHandler("backup", backup))
     application.add_handler(CommandHandler("restore", restore))
@@ -240,17 +245,13 @@ def main():
         CallbackQueryHandler(help_page, pattern="^help_")
     )
 
-    application.add_handler(
-        CommandHandler("leaderboard", leaderboard)
-    )
+    application.add_handler(CommandHandler("leaderboard", leaderboard))
 
     application.add_handler(
         CallbackQueryHandler(leaderboard_callback, pattern="^leaderboard_")
     )
 
-    application.add_handler(
-        PollAnswerHandler(poll_answer)
-    )
+    application.add_handler(PollAnswerHandler(poll_answer))
 
     application.add_handler(CommandHandler("adminpanel", admin_panel))
 
