@@ -5,21 +5,22 @@ from bot.config import ADMIN_ID
 from bot.database.db import db
 import asyncio
 
-GROUPS_PER_PAGE = 6
+GROUPS_PER_PAGE = 5
 
 
-# 🔥 MAIN COMMAND (/links)
+# ===== COMMAND =====
 async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.effective_user.id != ADMIN_ID:
         return
 
-    await update.message.reply_text("⏳ Loading links...")
+    await update.message.reply_text("⏳ Loading group links...")
 
+    # background load (bot freeze नहीं होगा)
     asyncio.create_task(load_links(update, context))
 
 
-# 🔥 LOAD GROUPS
+# ===== LOAD GROUPS =====
 async def load_links(update, context):
 
     group_ids = await get_all_groups()
@@ -33,7 +34,7 @@ async def load_links(update, context):
     await send_link_page(update, context, page=0)
 
 
-# 🔥 PAGE SYSTEM
+# ===== PAGE SYSTEM =====
 async def send_link_page(update, context, page):
 
     group_ids = context.user_data.get("groups_list", [])
@@ -55,40 +56,39 @@ async def send_link_page(update, context, page):
 
             if group_data and group_data.get("invite_link"):
                 link = group_data["invite_link"]
-
             else:
                 try:
                     link = await context.bot.export_chat_invite_link(chat_id)
 
-                    # 💾 SAVE IN DB
+                    # SAVE LINK
                     await db.db.groups.update_one(
                         {"chat_id": chat_id},
                         {"$set": {"invite_link": link}},
                         upsert=True
                     )
-
                 except:
                     link = "No invite link permission"
 
-            text += f"• {chat.title}\n{link}\n\n"
+            # ===== FORMAT =====
+            text += f"{chat.title}\n{link}\n\n"
 
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.05)  # anti-rate limit
 
         except:
             continue
 
-    # 🔘 BUTTONS
+    # ===== BUTTONS =====
     keyboard = []
     nav_buttons = []
 
     if page > 0:
         nav_buttons.append(
-            InlineKeyboardButton("⬅️ Back", callback_data=f"link_page_{page-1}")
+            InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{page-1}")
         )
 
     if end < len(group_ids):
         nav_buttons.append(
-            InlineKeyboardButton("Next ➡️", callback_data=f"link_page_{page+1}")
+            InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{page+1}")
         )
 
     if nav_buttons:
@@ -97,16 +97,13 @@ async def send_link_page(update, context, page):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if update.callback_query:
-
         await update.callback_query.edit_message_text(
             text,
             parse_mode="Markdown",
             reply_markup=reply_markup,
             disable_web_page_preview=True
         )
-
     else:
-
         await update.message.reply_text(
             text,
             parse_mode="Markdown",
@@ -115,7 +112,7 @@ async def send_link_page(update, context, page):
         )
 
 
-# 🔥 PAGINATION CALLBACK
+# ===== CALLBACK =====
 async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
