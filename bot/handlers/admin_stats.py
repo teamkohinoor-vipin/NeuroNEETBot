@@ -6,28 +6,35 @@ from bot.config import ADMIN_ID
 import asyncio
 
 
-# 🔥 FAST USER COUNT (NO FREEZE)
+# ✅ REAL COUNT (FAST + SAFE LIMIT)
 async def get_real_user_count(context):
-
-    users = await db.db.users.count_documents({})
-    return users
-
-
-# 🔥 BACKGROUND CLEAN (SAFE)
-async def clean_fake_users(context):
 
     cursor = db.db.users.find({}, {"user_id": 1})
 
+    real = 0
+    checked = 0
+
     async for u in cursor:
+
+        if checked >= 200:   # ⚡ LIMIT लगा दिया (freeze नहीं होगा)
+            break
+
         try:
             await asyncio.wait_for(
                 context.bot.get_chat(u["user_id"]),
-                timeout=2
+                timeout=1.5
             )
+            real += 1
+
         except (Forbidden, BadRequest):
             await db.db.users.delete_one({"user_id": u["user_id"]})
+
         except:
             continue
+
+        checked += 1
+
+    return real
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,7 +53,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         "📊 NeuroNEETBot Stats\n\n"
-        f"👥 Users : {users}\n"
+        f"👥 Users : {users} (approx)\n"
         f"👥 Groups : {groups}\n"
         f"🧠 Questions : {questions}\n"
         f"📝 Pending Batches : {pending}\n"
@@ -54,6 +61,3 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text(text)
-
-    # 🔁 background cleanup (NO FREEZE)
-    asyncio.create_task(clean_fake_users(context))
