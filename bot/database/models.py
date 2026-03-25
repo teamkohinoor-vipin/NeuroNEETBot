@@ -220,11 +220,11 @@ async def record_answer(user_id: int, username: str, question_id: ObjectId, poin
 
 
 # ================= GROUP =================
+# ✅ FIXED: preserve existing fields (title, invite_link) when adding group
 async def add_group(chat_id: int):
-
     await db.db.groups.update_one(
         {"chat_id": chat_id},
-        {"$set": {"chat_id": chat_id}},
+        {"$setOnInsert": {"chat_id": chat_id}},   # only set on insert, never overwrite
         upsert=True
     )
 
@@ -234,22 +234,18 @@ async def remove_group(chat_id: int):
 
 
 async def get_all_groups():
-
     cursor = db.db.groups.find({}, {"chat_id": 1})
     groups = await cursor.to_list(length=1000)
-
     return [g["chat_id"] for g in groups]
 
 
 # ================= CONFIG =================
 async def get_config(key: str, default=None):
-
     doc = await db.db.config.find_one({"_id": key})
     return doc["value"] if doc else default
 
 
 async def set_config(key: str, value):
-
     await db.db.config.update_one(
         {"_id": key},
         {"$set": {"value": value}},
@@ -259,7 +255,6 @@ async def set_config(key: str, value):
 
 # ================= RESET =================
 async def reset_database():
-
     questions = await db.db.questions.delete_many({})
     poll_logs = await db.db.poll_logs.delete_many({})
     answers = await db.db.answers.delete_many({})
