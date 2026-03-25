@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 GROUPS_PER_PAGE = 5
 
 
+# ===== COMMAND =====
 async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -18,33 +19,39 @@ async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     asyncio.create_task(load_and_display_links(msg, context))
 
 
+# ===== BACKGROUND LOADER =====
 async def load_and_display_links(message, context):
     try:
+        # Get all groups from DB (may include old ones where bot left)
         group_ids = await get_all_groups()
         if not group_ids:
             await message.edit_text("No groups found.")
             return
 
-        context.user_data["group_ids"] = group_ids
-        await fetch_group_details(group_ids, context.bot)
+        # Fetch current data and filter out groups where bot is no longer present
+        valid_group_ids = await fetch_group_details(group_ids, context.bot)
+
+        if not valid_group_ids:
+            await message.edit_text("No active groups found.")
+            return
+
+        # Store valid IDs for pagination
+        context.user_data["group_ids"] = valid_group_ids
         await display_page(message, context, page=0)
     except Exception as e:
         logger.error(f"Error loading links: {e}")
         await message.edit_text("❌ Failed to load group links.")
 
 
+# ===== FETCH GROUP DETAILS IN PARALLEL =====
 async def fetch_group_details(group_ids, bot):
     semaphore = asyncio.Semaphore(5)
+    valid_ids = []
 
     async def fetch_one(chat_id):
         async with semaphore:
-            # Skip only if both title and link already exist
-            existing = await db.db.groups.find_one({"chat_id": chat_id})
-            if existing and existing.get("title") and existing.get("invite_link"):
-                return
-
+            # Try to get chat info – if fails, bot is not in group, delete from DB
             try:
-                # Always fetch title first
                 chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=3)
                 title = chat.title
                 # Try to get invite link (may fail if not admin)
@@ -52,33 +59,34 @@ async def fetch_group_details(group_ids, bot):
                     link = await asyncio.wait_for(bot.export_chat_invite_link(chat_id), timeout=3)
                 except:
                     link = "❌ Link not available"
-                # Store both
+
+                # Store both in DB
                 await db.db.groups.update_one(
                     {"chat_id": chat_id},
                     {"$set": {"title": title, "invite_link": link}},
                     upsert=True
                 )
+                valid_ids.append(chat_id)   # This group is active
             except Exception as e:
-                logger.warning(f"Could not fetch data for {chat_id}: {e}")
-                # Fallback – store placeholders
-                await db.db.groups.update_one(
-                    {"chat_id": chat_id},
-                    {"$set": {"title": "Unknown Group", "invite_link": "❌ Link not available"}},
-                    upsert=True
-                )
+                # Bot not in this group anymore – delete it from DB
+                logger.info(f"Removing group {chat_id} (bot not present)")
+                await db.db.groups.delete_one({"chat_id": chat_id})
 
     await asyncio.gather(*[fetch_one(cid) for cid in group_ids])
+    return valid_ids
 
 
+# ===== DISPLAY PAGE (common for both initial and callback) =====
 async def display_page(message_or_query, context, page):
     group_ids = context.user_data.get("group_ids")
     if not group_ids:
+        # Should not happen, but fallback
         group_ids = await get_all_groups()
         context.user_data["group_ids"] = group_ids
 
     total = len(group_ids)
     if total == 0:
-        await edit_text(message_or_query, "No groups found.")
+        await edit_text(message_or_query, "No active groups found.")
         return
 
     start = page * GROUPS_PER_PAGE
@@ -96,6 +104,7 @@ async def display_page(message_or_query, context, page):
             link = "❌ Link not available"
         text += f"*{title}*\n{link}\n\n"
 
+    # Pagination buttons
     keyboard = []
     nav = []
     if page > 0:
@@ -124,6 +133,7 @@ async def edit_text(target, text, reply_markup=None):
             logger.warning(f"Edit failed: {e}")
 
 
+# ===== CALLBACK HANDLER =====
 async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
