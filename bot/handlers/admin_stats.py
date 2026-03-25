@@ -9,8 +9,10 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    # ⚡ FAST (NO API CALL)
-    users = await db.db.users.count_documents({})
+    # ✅ Count unique users (distinct user_id)
+    unique_users = await db.db.users.distinct("user_id")
+    users_count = len(unique_users)
+
     groups = await db.db.groups.count_documents({})
     questions = await db.db.questions.count_documents({})
     pending = await db.db.pending_batches.count_documents({"status": "pending"})
@@ -20,7 +22,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         "📊 NeuroNEETBot Stats\n\n"
-        f"👥 Users : {users}\n"
+        f"👥 Users : {users_count}\n"
         f"👥 Groups : {groups}\n"
         f"🧠 Questions : {questions}\n"
         f"📝 Pending Batches : {pending}\n"
