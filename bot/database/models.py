@@ -7,6 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# ================= NORMALIZE =================
 def normalize_question(text: str):
     text = text.lower()
     text = re.sub(r"[^\w\s]", "", text)
@@ -14,6 +15,7 @@ def normalize_question(text: str):
     return text.strip()
 
 
+# ================= USER =================
 async def get_user(user_id: int):
     return await db.db.users.find_one({"user_id": user_id})
 
@@ -46,6 +48,7 @@ async def update_user_stats(user_id: int, username: str, correct: bool, chapter:
     await db.db.users.update_one({"user_id": user_id}, update)
 
 
+# ================= LEADERBOARD =================
 async def get_top_users(chat_id: int, limit: int = 10, since: datetime = None):
 
     match = {"chat_id": chat_id}
@@ -68,25 +71,28 @@ async def get_top_users(chat_id: int, limit: int = 10, since: datetime = None):
     return await cursor.to_list(length=limit)
 
 
+# ================= QUESTIONS =================
 async def add_question(question_data: dict):
+
+    # 🔥 normalized field add (future fast check)
+    question_data["normalized"] = normalize_question(question_data["question"])
+
     result = await db.db.questions.insert_one(question_data)
     return result.inserted_id
 
 
-# ✅ FINAL NO-REPEAT SYSTEM (FAST + SAFE)
+# ================= RANDOM QUESTION =================
 async def get_random_question(subject: str, chat_id: int):
 
-    # 🔥 fast distinct (no loop)
     used_ids = await db.db.poll_logs.distinct(
         "question_id",
         {"chat_id": chat_id, "subject": subject}
     )
 
-    # ⚡ LIMIT used_ids size (VERY IMPORTANT FIX)
+    # ⚡ LIMIT (VERY IMPORTANT)
     if len(used_ids) > 5000:
         used_ids = used_ids[-5000:]
 
-    # 🎯 try unused question
     pipeline = [
         {
             "$match": {
@@ -104,8 +110,8 @@ async def get_random_question(subject: str, chat_id: int):
     if questions:
         return questions[0]
 
-    # 🔁 fallback (restart cycle)
-    logger.info(f"All questions used for {subject} in group {chat_id}, restarting cycle")
+    # 🔁 fallback
+    logger.info(f"Restarting question cycle for {subject}")
 
     pipeline = [
         {
@@ -123,20 +129,19 @@ async def get_random_question(subject: str, chat_id: int):
     return questions[0] if questions else None
 
 
+# ================= QUESTION EXISTS (FIXED) =================
 async def question_exists(question_text: str):
 
     normalized = normalize_question(question_text)
 
-    cursor = db.db.questions.find({}, {"question": 1})
+    doc = await db.db.questions.find_one({
+        "normalized": normalized
+    })
 
-    async for q in cursor:
-        existing = normalize_question(q["question"])
-        if existing == normalized:
-            return True
-
-    return False
+    return bool(doc)
 
 
+# ================= BATCH =================
 async def create_pending_batch(user_id: int, subject: str, class_: int, chapter: str):
 
     batch = {
@@ -173,6 +178,7 @@ async def update_batch_status(batch_id: ObjectId, status: str):
     )
 
 
+# ================= POLL =================
 async def log_poll(poll_id: int, message_id: int, question_id: ObjectId, subject: str, chapter: str, chat_id: int):
 
     await db.db.poll_logs.insert_one({
@@ -200,6 +206,7 @@ async def get_question_by_poll(poll_id: int):
     return None
 
 
+# ================= ANSWER =================
 async def record_answer(user_id: int, username: str, question_id: ObjectId, points_change: int, chat_id: int):
 
     await db.db.answers.insert_one({
@@ -212,6 +219,7 @@ async def record_answer(user_id: int, username: str, question_id: ObjectId, poin
     })
 
 
+# ================= GROUP =================
 async def add_group(chat_id: int):
 
     await db.db.groups.update_one(
@@ -227,12 +235,13 @@ async def remove_group(chat_id: int):
 
 async def get_all_groups():
 
-    cursor = db.db.groups.find({})
-    groups = await cursor.to_list(length=None)
+    cursor = db.db.groups.find({}, {"chat_id": 1})
+    groups = await cursor.to_list(length=1000)
 
     return [g["chat_id"] for g in groups]
 
 
+# ================= CONFIG =================
 async def get_config(key: str, default=None):
 
     doc = await db.db.config.find_one({"_id": key})
@@ -248,6 +257,7 @@ async def set_config(key: str, value):
     )
 
 
+# ================= RESET =================
 async def reset_database():
 
     questions = await db.db.questions.delete_many({})
