@@ -26,14 +26,18 @@ async def load_and_display_links(message, context):
             await message.edit_text("No groups found.")
             return
 
+        # Fetch missing data for groups that don't have title/link yet
         await fetch_group_details(group_ids, context.bot)
 
+        # Get only active groups (bot still present)
         valid_ids = await get_active_group_ids(context.bot, group_ids)
         if not valid_ids:
             await message.edit_text("No active groups found.")
             return
 
+        # Store active group IDs in context for pagination
         context.user_data["group_ids"] = valid_ids
+        logger.info(f"Loaded {len(valid_ids)} active groups.")
         await display_page(message, context, page=0)
     except Exception as e:
         logger.error(f"Error loading links: {e}")
@@ -90,10 +94,13 @@ async def display_page(message_or_query, context, page):
         await edit_text(message_or_query, "No active groups found.")
         return
 
+    # Compute pagination
+    total_pages = math.ceil(total / GROUPS_PER_PAGE)
     start = page * GROUPS_PER_PAGE
     end = min(start + GROUPS_PER_PAGE, total)
     page_groups = group_ids[start:end]
 
+    # Build text
     text = "📢 *Bot Group Links*\n\n"
     for idx, cid in enumerate(page_groups, start=start+1):
         group_data = await db.db.groups.find_one({"chat_id": cid})
@@ -105,11 +112,9 @@ async def display_page(message_or_query, context, page):
             link = "❌ Link not available"
         text += f"{idx}. *{title}*\n{link}\n\n"
 
-    # Pagination buttons with explicit page numbers
-    total_pages = math.ceil(total / GROUPS_PER_PAGE)
+    # Build inline keyboard with wrap‑around pagination
     keyboard = []
     if total_pages > 1:
-        # Calculate previous and next page numbers with wrap-around
         prev_page = (page - 1) % total_pages
         next_page = (page + 1) % total_pages
         nav = [
@@ -125,14 +130,22 @@ async def display_page(message_or_query, context, page):
 async def edit_text(target, text, reply_markup=None):
     if hasattr(target, "edit_message_text"):
         try:
-            await target.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup,
-                                           disable_web_page_preview=True)
+            await target.edit_message_text(
+                text,
+                parse_mode="Markdown",
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
         except Exception as e:
             logger.warning(f"Edit failed: {e}")
     else:
         try:
-            await target.edit_text(text, parse_mode="Markdown", reply_markup=reply_markup,
-                                   disable_web_page_preview=True)
+            await target.edit_text(
+                text,
+                parse_mode="Markdown",
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
         except Exception as e:
             logger.warning(f"Edit failed: {e}")
 
@@ -142,11 +155,15 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
 
     # Extract target page from callback data
-    page = int(query.data.split("_")[-1])  # format: links_page_<page>
+    try:
+        page = int(query.data.split("_")[-1])
+    except:
+        await query.edit_message_text("Invalid page.")
+        return
 
     group_ids = context.user_data.get("group_ids")
     if not group_ids:
-        # If context data missing, reload from DB
+        # If context lost, reload from DB
         group_ids = await get_active_group_ids(context.bot, await get_all_groups())
         context.user_data["group_ids"] = group_ids
 
