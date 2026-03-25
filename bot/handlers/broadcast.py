@@ -52,30 +52,25 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = update.message.reply_to_message
 
-    total_users = await db.db.users.count_documents({})
+    # ✅ Fetch unique user IDs (avoid duplicates)
+    unique_users = await db.db.users.distinct("user_id")
+    total_users = len(unique_users)
+
     await update.message.reply_text(f"🚀 User Broadcast Started\n👥 Total Users: {total_users}")
-
-    cursor = db.db.users.find({}, {"user_id": 1})
-    users = []
-    async for u in cursor:
-        users.append(u)
-
-    if len(users) != total_users:
-        await update.message.reply_text(f"⚠️ Warning: Count mismatch (found {len(users)} documents, expected {total_users}).")
 
     sent = 0
     failed = 0
     batch_size = 20
 
-    for i in range(0, len(users), batch_size):
+    for i in range(0, total_users, batch_size):
         if not broadcast_running:
             break
-        batch = users[i:i + batch_size]
+        batch = unique_users[i:i + batch_size]
         tasks = []
-        for user in batch:
+        for user_id in batch:
             if not broadcast_running:
                 break
-            tasks.append(send_message_with_buttons(context, user["user_id"], msg))
+            tasks.append(send_message_with_buttons(context, user_id, msg))
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for r in results:
             if r is True:
@@ -89,8 +84,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 User Broadcast Completed/Stopped\n\n"
         f"✅ Sent: {sent}\n"
         f"❌ Failed: {failed}\n"
-        f"📊 Total in DB at start: {total_users}\n"
-        f"📊 Processed: {sent+failed}"
+        f"📊 Total Users: {total_users}"
     )
 
 
