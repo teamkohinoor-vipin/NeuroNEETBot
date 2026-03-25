@@ -15,8 +15,8 @@ from telegram.ext import (
 
 from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import connect_db, close_db
-from bot.scheduler import start_scheduler, send_quiz_to_group   # 👈 NEW import
-from bot.database.models import add_group, get_config
+from bot.scheduler import start_scheduler, send_quiz_to_group
+from bot.database.models import add_group, remove_group, get_config   # added remove_group
 
 from bot.handlers.start import start, help_callback, help_page
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
@@ -43,7 +43,6 @@ from bot.handlers.error import error_handler
 
 from bot.handlers.admin_stats import stats
 
-# 🔥 UPDATED IMPORT (ONLY CHANGE)
 from bot.handlers.broadcast import broadcast, group_broadcast, stopbroadcast
 
 # BACKUP
@@ -62,7 +61,7 @@ from bot.handlers.import_txt_questions import (
     import_txt_questions
 )
 
-# GROUP LIST FEATURE (FIXED)
+# GROUP LIST FEATURE
 from bot.handlers.links import links, link_page_callback
 
 
@@ -87,7 +86,6 @@ async def track_groups(update: Update, context):
         await add_group(chat.id)
 
 
-# ===== NEW HANDLER: Bot added to group =====
 async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.my_chat_member
     if result.new_chat_member.status == "member" and result.old_chat_member.status == "left":
@@ -129,6 +127,16 @@ async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
 
         await send_quiz_to_group(chat_id, context.bot)
+
+
+# ===== NEW HANDLER: Bot removed from group =====
+async def bot_removed_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = update.my_chat_member
+    # Bot's status changed to left/kicked from member/admin/creator
+    if result.new_chat_member.status in ["left", "kicked"] and result.old_chat_member.status in ["member", "administrator", "creator"]:
+        chat_id = result.chat.id
+        await remove_group(chat_id)
+        logger.info(f"Group {chat_id} removed from database (bot left/kicked)")
 
 
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -215,7 +223,6 @@ def main():
     application.add_handler(CommandHandler("groups", group_broadcast))
     application.add_handler(CommandHandler("stopbroadcast", stopbroadcast))
 
-    # ✅ ONLY CHANGE HERE
     application.add_handler(CommandHandler("links", links))
     application.add_handler(
         CallbackQueryHandler(link_page_callback, pattern="^links_page_")
@@ -267,10 +274,17 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
+    # ===== Bot added to group =====
     application.add_handler(
         ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
     )
 
+    # ===== Bot removed from group =====
+    application.add_handler(
+        ChatMemberHandler(bot_removed_from_group, ChatMemberHandler.MY_CHAT_MEMBER)
+    )
+
+    # ===== Track groups on any message (fallback) =====
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
