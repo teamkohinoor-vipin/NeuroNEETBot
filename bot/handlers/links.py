@@ -14,6 +14,8 @@ async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
+    await update.message.reply_text("⏳ Loading group links...")
+
     group_ids = await get_all_groups()
 
     if not group_ids:
@@ -48,13 +50,9 @@ async def send_link_page(update, context, page):
     for chat_id in groups_slice:
 
         chat = await safe_get_chat(context, chat_id)
-
-        # ❌ अगर chat नहीं मिला
         if not chat:
-            text += f"Group ID: {chat_id}\n❌ Bot not in group / no access\n\n"
             continue
 
-        # ===== INVITE LINK =====
         group_data = await db.db.groups.find_one({"chat_id": chat_id})
 
         if group_data and group_data.get("invite_link"):
@@ -73,9 +71,9 @@ async def send_link_page(update, context, page):
                 )
 
             except:
-                link = "❌ No invite link permission"
+                continue   # ❌ skip if no permission
 
-        # ✅ FINAL OUTPUT
+        # ✅ ONLY VALID GROUPS SHOW
         text += f"{chat.title}\n{link}\n\n"
 
         await asyncio.sleep(0.05)
