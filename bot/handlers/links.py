@@ -4,212 +4,130 @@ from bot.database.models import get_all_groups
 from bot.config import ADMIN_ID
 from bot.database.db import db
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 GROUPS_PER_PAGE = 5
 
 
 # ===== COMMAND =====
 async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     if update.effective_user.id != ADMIN_ID:
         return
 
     msg = await update.message.reply_text("⏳ Loading group links...")
-
-    # 🔥 background task (bot free रहेगा)
-    asyncio.create_task(load_links(msg, context))
+    asyncio.create_task(load_and_display_links(msg, context))
 
 
-# ===== LOAD IN BACKGROUND =====
-async def load_links(message, context):
+# ===== BACKGROUND LOADER =====
+async def load_and_display_links(message, context):
+    try:
+        group_ids = await get_all_groups()
+        if not group_ids:
+            await message.edit_text("No groups found.")
+            return
 
-    group_ids = await get_all_groups()
+        context.user_data["group_ids"] = group_ids
+        await fetch_group_details(group_ids, context.bot)
+        await display_page(message, context, page=0)
+    except Exception as e:
+        logger.error(f"Error loading links: {e}")
+        await message.edit_text("❌ Failed to load group links.")
 
+
+# ===== FETCH GROUP DETAILS IN PARALLEL =====
+async def fetch_group_details(group_ids, bot):
+    semaphore = asyncio.Semaphore(5)
+
+    async def fetch_one(chat_id):
+        async with semaphore:
+            # Check if already in DB
+            existing = await db.db.groups.find_one({"chat_id": chat_id})
+            if existing and existing.get("invite_link") and existing.get("title"):
+                return
+
+            try:
+                chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=3)
+                title = chat.title
+                link = await asyncio.wait_for(bot.export_chat_invite_link(chat_id), timeout=3)
+                await db.db.groups.update_one(
+                    {"chat_id": chat_id},
+                    {"$set": {"title": title, "invite_link": link}},
+                    upsert=True
+                )
+            except Exception as e:
+                logger.warning(f"Could not fetch data for {chat_id}: {e}")
+                await db.db.groups.update_one(
+                    {"chat_id": chat_id},
+                    {"$set": {"title": "Unknown Group", "invite_link": "❌ Link not available"}},
+                    upsert=True
+                )
+
+    await asyncio.gather(*[fetch_one(cid) for cid in group_ids])
+
+
+# ===== DISPLAY PAGE (common for both initial and callback) =====
+async def display_page(message_or_query, context, page):
+    group_ids = context.user_data.get("group_ids")
     if not group_ids:
-        await message.edit_text("No groups found.")
+        group_ids = await get_all_groups()
+        context.user_data["group_ids"] = group_ids
+
+    total = len(group_ids)
+    if total == 0:
+        await edit_text(message_or_query, "No groups found.")
         return
 
-    context.user_data["groups_list"] = group_ids
-
-    await send_link_page_from_message(message, context, page=0)
-
-
-# ===== SAFE GET CHAT =====
-async def safe_get_chat(context, chat_id):
-    try:
-        return await asyncio.wait_for(
-            context.bot.get_chat(chat_id),
-            timeout=2
-        )
-    except:
-        return None
-
-
-# ===== PAGE SYSTEM (MAIN) =====
-async def send_link_page_from_message(message, context, page):
-
-    group_ids = context.user_data.get("groups_list", [])
-
-    valid_groups = []
-
-    for chat_id in group_ids:
-
-        chat = await safe_get_chat(context, chat_id)
-
-        if not chat:
-            valid_groups.append(("Unknown Group", "❌ Link not available"))
-            continue
-
-        group_data = await db.db.groups.find_one({"chat_id": chat_id})
-
-        if group_data and group_data.get("invite_link"):
-            link = group_data["invite_link"]
-        else:
-            try:
-                link = await asyncio.wait_for(
-                    context.bot.export_chat_invite_link(chat_id),
-                    timeout=2
-                )
-
-                await db.db.groups.update_one(
-                    {"chat_id": chat_id},
-                    {"$set": {"invite_link": link}},
-                    upsert=True
-                )
-
-            except:
-                link = "❌ Link not available"
-
-        valid_groups.append((chat.title, link))
-
-        await asyncio.sleep(0.03)   # 🔥 anti-freeze
-
-
-    # ===== PAGINATION =====
     start = page * GROUPS_PER_PAGE
-    end = start + GROUPS_PER_PAGE
+    end = min(start + GROUPS_PER_PAGE, total)
 
-    groups_slice = valid_groups[start:end]
+    page_groups = group_ids[start:end]
 
-    text = "📢 Bot Group Links\n\n"
+    text = "📢 *Bot Group Links*\n\n"
+    for cid in page_groups:
+        group_data = await db.db.groups.find_one({"chat_id": cid})
+        if group_data:
+            title = group_data.get("title", "Unknown Group")
+            link = group_data.get("invite_link", "❌ Link not available")
+        else:
+            title = "Unknown Group"
+            link = "❌ Link not available"
+        text += f"*{title}*\n{link}\n\n"
 
-    for title, link in groups_slice:
-        text += f"{title}\n{link}\n\n"
-
-
-    # ===== BUTTONS =====
+    # Buttons
     keyboard = []
-    nav_buttons = []
-
+    nav = []
     if page > 0:
-        nav_buttons.append(
-            InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{page-1}")
-        )
+        nav.append(InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{page-1}"))
+    if end < total:
+        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{page+1}"))
+    if nav:
+        keyboard.append(nav)
 
-    if end < len(valid_groups):
-        nav_buttons.append(
-            InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{page+1}")
-        )
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
 
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    try:
-        await message.edit_text(
-            text,
-            reply_markup=reply_markup,
-            disable_web_page_preview=True
-        )
-    except:
-        pass
+    await edit_text(message_or_query, text, reply_markup)
 
 
-# ===== CALLBACK =====
+async def edit_text(target, text, reply_markup=None):
+    if hasattr(target, "edit_message_text"):
+        try:
+            await target.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup,
+                                           disable_web_page_preview=True)
+        except Exception as e:
+            logger.warning(f"Edit failed: {e}")
+    else:
+        try:
+            await target.edit_text(text, parse_mode="Markdown", reply_markup=reply_markup,
+                                   disable_web_page_preview=True)
+        except Exception as e:
+            logger.warning(f"Edit failed: {e}")
+
+
+# ===== CALLBACK HANDLER =====
 async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     query = update.callback_query
     await query.answer()
-
     page = int(query.data.split("_")[-1])
-
-    # ⚠️ callback में normal function use करो
-    await send_link_page(update, context, page)
-
-
-# ===== CALLBACK PAGE FUNCTION =====
-async def send_link_page(update, context, page):
-
-    group_ids = context.user_data.get("groups_list", [])
-
-    valid_groups = []
-
-    for chat_id in group_ids:
-
-        chat = await safe_get_chat(context, chat_id)
-
-        if not chat:
-            valid_groups.append(("Unknown Group", "❌ Link not available"))
-            continue
-
-        group_data = await db.db.groups.find_one({"chat_id": chat_id})
-
-        if group_data and group_data.get("invite_link"):
-            link = group_data["invite_link"]
-        else:
-            try:
-                link = await asyncio.wait_for(
-                    context.bot.export_chat_invite_link(chat_id),
-                    timeout=2
-                )
-
-                await db.db.groups.update_one(
-                    {"chat_id": chat_id},
-                    {"$set": {"invite_link": link}},
-                    upsert=True
-                )
-
-            except:
-                link = "❌ Link not available"
-
-        valid_groups.append((chat.title, link))
-
-
-    start = page * GROUPS_PER_PAGE
-    end = start + GROUPS_PER_PAGE
-
-    groups_slice = valid_groups[start:end]
-
-    text = "📢 Bot Group Links\n\n"
-
-    for title, link in groups_slice:
-        text += f"{title}\n{link}\n\n"
-
-
-    keyboard = []
-    nav_buttons = []
-
-    if page > 0:
-        nav_buttons.append(
-            InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{page-1}")
-        )
-
-    if end < len(valid_groups):
-        nav_buttons.append(
-            InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{page+1}")
-        )
-
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    try:
-        await update.callback_query.edit_message_text(
-            text,
-            reply_markup=reply_markup,
-            disable_web_page_preview=True
-        )
-    except:
-        pass
+    await display_page(query, context, page)
