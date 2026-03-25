@@ -26,10 +26,8 @@ async def load_and_display_links(message, context):
             await message.edit_text("No groups found.")
             return
 
-        # Fetch missing data for groups that don't have title/link yet
         await fetch_group_details(group_ids, context.bot)
 
-        # Get only active groups (bot still present)
         valid_ids = await get_active_group_ids(context.bot, group_ids)
         if not valid_ids:
             await message.edit_text("No active groups found.")
@@ -107,13 +105,16 @@ async def display_page(message_or_query, context, page):
             link = "❌ Link not available"
         text += f"{idx}. *{title}*\n{link}\n\n"
 
-    # Always show both navigation buttons (wrap-around)
-    keyboard = []
+    # Pagination buttons with explicit page numbers
     total_pages = math.ceil(total / GROUPS_PER_PAGE)
+    keyboard = []
     if total_pages > 1:
+        # Calculate previous and next page numbers with wrap-around
+        prev_page = (page - 1) % total_pages
+        next_page = (page + 1) % total_pages
         nav = [
-            InlineKeyboardButton("⬅️ Back", callback_data=f"links_back"),
-            InlineKeyboardButton("Next ➡️", callback_data=f"links_next")
+            InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{prev_page}"),
+            InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{next_page}")
         ]
         keyboard.append(nav)
 
@@ -140,6 +141,9 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
 
+    # Extract target page from callback data
+    page = int(query.data.split("_")[-1])  # format: links_page_<page>
+
     group_ids = context.user_data.get("group_ids")
     if not group_ids:
         # If context data missing, reload from DB
@@ -152,24 +156,7 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     total_pages = math.ceil(total / GROUPS_PER_PAGE)
+    # Ensure page is within valid range (should be, but just in case)
+    page = page % total_pages
 
-    # Get current page from context (we need to store current page in context or retrieve from message)
-    # Simpler: store current page in context when displaying a page.
-    # We'll store the page number in context.user_data["links_page"] after each display.
-    # But we can also extract it from the message text? Not reliable. Let's store it.
-
-    # If we don't have current page stored, default to 0.
-    current_page = context.user_data.get("links_page", 0)
-
-    direction = query.data.split("_")[1]  # "back" or "next"
-    if direction == "back":
-        new_page = (current_page - 1) % total_pages
-    else:  # next
-        new_page = (current_page + 1) % total_pages
-
-    context.user_data["links_page"] = new_page
-    await display_page(query, context, new_page)
-
-
-# Note: We also need to modify display_page to store the current page in context.
-# Update display_page to store page number.
+    await display_page(query, context, page)
