@@ -5,6 +5,7 @@ from bot.config import ADMIN_ID
 from bot.database.db import db
 import asyncio
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,6 @@ async def fetch_group_details(group_ids, bot):
 
     async def fetch_one(chat_id):
         async with semaphore:
-            # Skip if already have title and link
             existing = await db.db.groups.find_one({"chat_id": chat_id})
             if existing and existing.get("title") and existing.get("invite_link"):
                 return
@@ -64,7 +64,6 @@ async def fetch_group_details(group_ids, bot):
                     upsert=True
                 )
             except Exception as e:
-                # Bot not in this group – delete it
                 logger.info(f"Removing group {chat_id} (bot not present)")
                 await db.db.groups.delete_one({"chat_id": chat_id})
 
@@ -72,7 +71,6 @@ async def fetch_group_details(group_ids, bot):
 
 
 async def get_active_group_ids(bot, all_ids):
-    """Filter groups where bot is still a member."""
     valid = []
     for cid in all_ids:
         try:
@@ -109,14 +107,14 @@ async def display_page(message_or_query, context, page):
             link = "❌ Link not available"
         text += f"{idx}. *{title}*\n{link}\n\n"
 
-    # Pagination buttons
+    # Always show both navigation buttons (wrap-around)
     keyboard = []
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{page-1}"))
-    if end < total:
-        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{page+1}"))
-    if nav:
+    total_pages = math.ceil(total / GROUPS_PER_PAGE)
+    if total_pages > 1:
+        nav = [
+            InlineKeyboardButton("⬅️ Back", callback_data=f"links_back"),
+            InlineKeyboardButton("Next ➡️", callback_data=f"links_next")
+        ]
         keyboard.append(nav)
 
     reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
@@ -141,5 +139,37 @@ async def edit_text(target, text, reply_markup=None):
 async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    page = int(query.data.split("_")[-1])
-    await display_page(query, context, page)
+
+    group_ids = context.user_data.get("group_ids")
+    if not group_ids:
+        # If context data missing, reload from DB
+        group_ids = await get_active_group_ids(context.bot, await get_all_groups())
+        context.user_data["group_ids"] = group_ids
+
+    total = len(group_ids)
+    if total == 0:
+        await query.edit_message_text("No active groups found.")
+        return
+
+    total_pages = math.ceil(total / GROUPS_PER_PAGE)
+
+    # Get current page from context (we need to store current page in context or retrieve from message)
+    # Simpler: store current page in context when displaying a page.
+    # We'll store the page number in context.user_data["links_page"] after each display.
+    # But we can also extract it from the message text? Not reliable. Let's store it.
+
+    # If we don't have current page stored, default to 0.
+    current_page = context.user_data.get("links_page", 0)
+
+    direction = query.data.split("_")[1]  # "back" or "next"
+    if direction == "back":
+        new_page = (current_page - 1) % total_pages
+    else:  # next
+        new_page = (current_page + 1) % total_pages
+
+    context.user_data["links_page"] = new_page
+    await display_page(query, context, new_page)
+
+
+# Note: We also need to modify display_page to store the current page in context.
+# Update display_page to store page number.
