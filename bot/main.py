@@ -64,8 +64,7 @@ from bot.handlers.import_txt_questions import (
 # GROUP LIST FEATURE
 from bot.handlers.links import links, link_page_callback
 
-# ===== NEW CLEANUP IMPORT =====
-from bot.handlers.cleanup import clean_duplicate_users
+# ❌ REMOVED: from bot.handlers.cleanup import clean_duplicate_users
 
 
 logging.basicConfig(
@@ -294,8 +293,7 @@ def main():
         MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
 
-    # ===== NEW CLEANUP COMMAND =====
-    application.add_handler(CommandHandler("cleanusers", clean_duplicate_users))
+    # ❌ REMOVED: application.add_handler(CommandHandler("cleanusers", clean_duplicate_users))
 
     application.add_error_handler(error_handler)
 
