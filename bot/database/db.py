@@ -21,9 +21,12 @@ async def connect_db(app=None):
     db.db = db.client["neetquiz"]
 
     # -----------------------------------------------------------------
-    # Remove duplicate users (keep only one document per user_id)
+    # Step 1: Remove duplicate users (keep first per user_id)
     # -----------------------------------------------------------------
     try:
+        before = await db.db.users.count_documents({})
+        print(f"📊 Before cleanup: {before} user documents")
+
         pipeline = [
             {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "docs": {"$push": "$_id"}}},
             {"$match": {"count": {"$gt": 1}}}
@@ -38,11 +41,13 @@ async def connect_db(app=None):
                 deleted += 1
         if deleted:
             print(f"🧹 Removed {deleted} duplicate user entries.")
+        after = await db.db.users.count_documents({})
+        print(f"📊 After cleanup: {after} user documents")
     except Exception as e:
         print(f"⚠️ Duplicate removal warning: {e}")
 
     # -----------------------------------------------------------------
-    # Create unique index on user_id (prevents future duplicates)
+    # Step 2: Create unique index on user_id (prevents future duplicates)
     # -----------------------------------------------------------------
     try:
         await db.db.users.create_index("user_id", unique=True)
@@ -51,7 +56,7 @@ async def connect_db(app=None):
         print(f"⚠️ Index creation warning: {e}")
 
     # -----------------------------------------------------------------
-    # Create other performance indexes (ignore conflicts)
+    # Step 3: Other performance indexes (ignore conflicts)
     # -----------------------------------------------------------------
     try:
         await db.db.poll_logs.create_index("poll_id")
