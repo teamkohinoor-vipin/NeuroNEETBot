@@ -7,7 +7,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    # Unique users count
+    # Unique users count (no duplicates)
     unique_users = await db.db.users.distinct("user_id")
     users_count = len(unique_users)
 
