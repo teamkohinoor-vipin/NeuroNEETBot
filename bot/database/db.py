@@ -21,10 +21,9 @@ async def connect_db(app=None):
     db.db = db.client["neetquiz"]
 
     # -----------------------------------------------------------------
-    # Step 1: Remove duplicate users (keep only one per user_id)
+    # Remove duplicate users (keep only one document per user_id)
     # -----------------------------------------------------------------
     try:
-        # Find all user_ids that appear more than once
         pipeline = [
             {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "docs": {"$push": "$_id"}}},
             {"$match": {"count": {"$gt": 1}}}
@@ -32,8 +31,8 @@ async def connect_db(app=None):
         cursor = db.db.users.aggregate(pipeline)
         deleted = 0
         async for doc in cursor:
-            keep = doc["docs"][0]          # keep the first document
-            to_delete = doc["docs"][1:]    # delete the rest
+            keep = doc["docs"][0]
+            to_delete = doc["docs"][1:]
             for _id in to_delete:
                 await db.db.users.delete_one({"_id": _id})
                 deleted += 1
@@ -43,7 +42,7 @@ async def connect_db(app=None):
         print(f"⚠️ Duplicate removal warning: {e}")
 
     # -----------------------------------------------------------------
-    # Step 2: Create unique index on user_id (safe now)
+    # Create unique index on user_id (prevents future duplicates)
     # -----------------------------------------------------------------
     try:
         await db.db.users.create_index("user_id", unique=True)
@@ -52,7 +51,7 @@ async def connect_db(app=None):
         print(f"⚠️ Index creation warning: {e}")
 
     # -----------------------------------------------------------------
-    # Step 3: Create other performance indexes (ignore conflicts)
+    # Create other performance indexes (ignore conflicts)
     # -----------------------------------------------------------------
     try:
         await db.db.poll_logs.create_index("poll_id")
