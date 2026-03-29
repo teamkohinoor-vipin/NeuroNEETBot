@@ -16,7 +16,7 @@ from telegram.ext import (
 from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
 from bot.database.db import connect_db, close_db
 from bot.scheduler import start_scheduler, send_quiz_to_group
-from bot.database.models import add_group, remove_group, get_config   # added remove_group
+from bot.database.models import add_group, remove_group, get_config
 
 from bot.handlers.start import start, help_callback, help_page
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
@@ -63,6 +63,9 @@ from bot.handlers.import_txt_questions import (
 
 # GROUP LIST FEATURE
 from bot.handlers.links import links, link_page_callback
+
+# ===== NEW CLEANUP IMPORT =====
+from bot.handlers.cleanup import clean_duplicate_users
 
 
 logging.basicConfig(
@@ -129,10 +132,8 @@ async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await send_quiz_to_group(chat_id, context.bot)
 
 
-# ===== NEW HANDLER: Bot removed from group =====
 async def bot_removed_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.my_chat_member
-    # Bot's status changed to left/kicked from member/admin/creator
     if result.new_chat_member.status in ["left", "kicked"] and result.old_chat_member.status in ["member", "administrator", "creator"]:
         chat_id = result.chat.id
         await remove_group(chat_id)
@@ -292,6 +293,9 @@ def main():
     application.add_handler(
         MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
+
+    # ===== NEW CLEANUP COMMAND =====
+    application.add_handler(CommandHandler("cleanusers", clean_duplicate_users))
 
     application.add_error_handler(error_handler)
 
