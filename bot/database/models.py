@@ -22,19 +22,12 @@ async def get_user(user_id: int):
 
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
 
+    # ❌ UPSERT REMOVE (IMPORTANT FIX)
     await db.db.users.update_one(
         {"user_id": user_id},
         {
-            "$set": {"username": username},
-            "$setOnInsert": {
-                "user_id": user_id,
-                "total_correct": 0,
-                "total_wrong": 0,
-                "total_points": 0,
-                "chapter_stats": {}
-            }
-        },
-        upsert=True
+            "$set": {"username": username}
+        }
     )
 
     update = {
@@ -74,7 +67,6 @@ async def get_top_users(chat_id: int, limit: int = 10, since: datetime = None):
 # ================= QUESTIONS =================
 async def add_question(question_data: dict):
 
-    # 🔥 normalized field add (future fast check)
     question_data["normalized"] = normalize_question(question_data["question"])
 
     result = await db.db.questions.insert_one(question_data)
@@ -89,7 +81,6 @@ async def get_random_question(subject: str, chat_id: int):
         {"chat_id": chat_id, "subject": subject}
     )
 
-    # ⚡ LIMIT (VERY IMPORTANT)
     if len(used_ids) > 5000:
         used_ids = used_ids[-5000:]
 
@@ -110,7 +101,6 @@ async def get_random_question(subject: str, chat_id: int):
     if questions:
         return questions[0]
 
-    # 🔁 fallback
     logger.info(f"Restarting question cycle for {subject}")
 
     pipeline = [
@@ -129,7 +119,7 @@ async def get_random_question(subject: str, chat_id: int):
     return questions[0] if questions else None
 
 
-# ================= QUESTION EXISTS (FIXED) =================
+# ================= QUESTION EXISTS =================
 async def question_exists(question_text: str):
 
     normalized = normalize_question(question_text)
@@ -220,11 +210,10 @@ async def record_answer(user_id: int, username: str, question_id: ObjectId, poin
 
 
 # ================= GROUP =================
-# ✅ FIXED: preserve existing fields (title, invite_link) when adding group
 async def add_group(chat_id: int):
     await db.db.groups.update_one(
         {"chat_id": chat_id},
-        {"$setOnInsert": {"chat_id": chat_id}},   # only set on insert, never overwrite
+        {"$setOnInsert": {"chat_id": chat_id}},
         upsert=True
     )
 
