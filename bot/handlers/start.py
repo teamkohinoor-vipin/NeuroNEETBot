@@ -114,15 +114,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🔎 CHECK USER EXISTS
     existing_user = await db.db.users.find_one({"user_id": user_id})
 
-    # SAVE USER
-    await db.db.users.update_one(
-        {"user_id": user_id},
-        {"$set": {
+    # ✅ FIXED USER SAVE (IMPORTANT)
+    if not existing_user:
+        await db.db.users.insert_one({
             "user_id": user_id,
-            "username": username
-        }},
-        upsert=True
-    )
+            "username": username,
+            "total_correct": 0,
+            "total_wrong": 0,
+            "total_points": 0,
+            "chapter_stats": {},
+            "joined_at": datetime.utcnow()
+        })
+    else:
+        await db.db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"username": username}}
+        )
 
     # ===== NEW USER NOTIFICATION =====
     if not existing_user:
@@ -148,7 +155,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    # ===== WELCOME MESSAGE =====
+    # ===== बाकी code same =====
 
     text = (
     f"🧪 *Welcome {user} to NeuroNEETBot!* 🧪\n\n"
@@ -214,32 +221,4 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text,
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    page = 0
-
-    await query.edit_message_text(
-        HELP_PAGES[page],
-        parse_mode="Markdown",
-        reply_markup=help_keyboard(page)
-    )
-
-
-async def help_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    page = int(query.data.split("_")[1])
-
-    await query.edit_message_text(
-        HELP_PAGES[page],
-        parse_mode="Markdown",
-        reply_markup=help_keyboard(page)
     )
