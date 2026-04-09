@@ -73,6 +73,22 @@ Compete with other students and climb the leaderboard.
 Practice daily quizzes to improve speed and accuracy for NEET.
 
 Good luck with your preparation 🚀
+""",
+
+"""
+📖 *Chapter Quiz – Custom Quiz System*
+
+Use `/startquiz` to start a custom quiz:
+- Choose subject → chapter → number of questions
+- Each question is sent as a Telegram poll
+- You answer at your own pace (no timer)
+- After all questions, you get your score and total time
+
+Use `/stopquiz` to stop an ongoing quiz.
+
+*Group quiz*: Only group admins can start. Multiple participants can answer, and a leaderboard with top 15 users is shown at the end (time‑based scoring).
+
+Enjoy practicing NEET questions!
 """
 ]
 
@@ -170,7 +186,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
-            [InlineKeyboardButton("📚 Start Quiz", callback_data="start_chapter_quiz")],   # 👈 ADDED
+            [InlineKeyboardButton("📚 Start Quiz", callback_data="start_chapter_quiz")],
         ]
 
         if question_enabled:
