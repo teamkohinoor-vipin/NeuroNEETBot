@@ -64,7 +64,13 @@ from bot.handlers.import_txt_questions import (
 # GROUP LIST FEATURE
 from bot.handlers.links import links, link_page_callback
 
-# ❌ NO cleanup import – duplicates handled in db.py
+# NEW: chapter quiz handlers
+from bot.handlers.chapter_quiz import (
+    chapter_quiz_conv,
+    quiz_answer_callback,
+    stop_quiz_command,
+    quiz_cancel
+)
 
 
 logging.basicConfig(
@@ -273,6 +279,12 @@ def main():
     application.add_handler(
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
+
+    # ===== CHAPTER QUIZ HANDLERS ===== (ADDED)
+    application.add_handler(chapter_quiz_conv)
+    application.add_handler(CallbackQueryHandler(quiz_answer_callback, pattern="^quiz_ans_"))
+    application.add_handler(CommandHandler("stopquiz", stop_quiz_command))
+    application.add_handler(CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel"))
 
     # ===== Bot added to group =====
     application.add_handler(
