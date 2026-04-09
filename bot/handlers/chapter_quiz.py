@@ -160,7 +160,7 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    timer = int(query.data.split("_")[2])
+    timer = int(query.data.split("_")[2])  # 15, 30, or 60
     context.user_data["quiz_timer"] = timer
 
     subject = context.user_data["quiz_subject"]
@@ -228,15 +228,13 @@ async def send_next_question(context, session_id):
         upsert=True
     )
 
-    # Create timeout task
+    # ✅ Timer task – auto-advance after timer seconds
     async def timeout():
         await asyncio.sleep(timer)
-        # Check if still on same question and quiz active
+        # Check if still on the same question and quiz active
         if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
             session["active"] = False
-            # Move to next question
             session["current_index"] += 1
-            # For group quiz, unanswered participants simply don't get points
             await send_next_question(context, session_id)
     task = asyncio.create_task(timeout())
     session["timeout_task"] = task
