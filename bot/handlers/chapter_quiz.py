@@ -9,7 +9,7 @@ from bot.database.db import db
 logger = logging.getLogger(__name__)
 
 # Conversation states
-SUBJECT, CHAPTER, QUESTION_COUNT = range(3)
+SUBJECT, CHAPTER, QUESTION_COUNT, TIMER = range(4)
 
 # In‑memory chapter quiz sessions (key: chat_id)
 chapter_quiz_sessions = {}
@@ -146,9 +146,29 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     count_str = query.data.split("_")[2]
     limit = None if count_str == "full" else int(count_str)
+    context.user_data["quiz_limit"] = limit
+
+    # Show timer options
+    keyboard = [
+        [InlineKeyboardButton("15 sec", callback_data="quiz_timer_15"),
+         InlineKeyboardButton("30 sec", callback_data="quiz_timer_30"),
+         InlineKeyboardButton("60 sec", callback_data="quiz_timer_60")],
+        [InlineKeyboardButton("🔙 Back", callback_data="quiz_back_count")]
+    ]
+    await query.edit_message_text("⏱️ *Select time per question:*", parse_mode="Markdown",
+                                  reply_markup=InlineKeyboardMarkup(keyboard))
+    return TIMER
+
+
+async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    timer = int(query.data.split("_")[2])  # 15, 30, or 60
+    context.user_data["quiz_timer"] = timer
 
     subject = context.user_data["quiz_subject"]
     chapter = context.user_data["quiz_chapter"]
+    limit = context.user_data.get("quiz_limit")
     is_group = context.user_data["is_group"]
     chat_id = context.user_data["chat_id"]
     user_id = context.user_data["user_id"]
@@ -167,13 +187,14 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "questions": questions,
         "current_index": 0,
         "total": total,
+        "timer": timer,
         "participants": {},
         "start_time": datetime.utcnow(),
         "active": True,
         "next_queued": False
     }
 
-    await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\n\nFirst question coming...")
+    await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\nTime per question: {timer} sec\n\nFirst question coming...")
     await asyncio.sleep(1)
     await send_next_question(context, session_id)
     return ConversationHandler.END
@@ -190,6 +211,7 @@ async def send_next_question(context, session_id):
     q = session["questions"][idx]
     options = q["options"]
     correct_option_id = q["correct_index"]
+    timer = session["timer"]
     message = await context.bot.send_poll(
         chat_id=session["chat_id"],
         question=q["question"],
@@ -197,7 +219,7 @@ async def send_next_question(context, session_id):
         type=Poll.QUIZ,
         correct_option_id=correct_option_id,
         is_anonymous=False,
-        explanation=f"Question {idx+1}/{session['total']}"
+        explanation=f"Question {idx+1}/{session['total']} | ⏱️ Time limit: {timer} sec"
     )
     session["current_poll_id"] = message.poll.id
     session["current_message_id"] = message.message_id
@@ -208,13 +230,18 @@ async def send_next_question(context, session_id):
         {"$set": {"chapter_quiz_session": session_id, "question_index": idx}},
         upsert=True
     )
-    if session["is_group"]:
-        async def advance_after_delay():
-            await asyncio.sleep(5)
-            if session.get("active") and session["current_index"] == idx:
-                session["current_index"] += 1
-                await send_next_question(context, session_id)
-        asyncio.create_task(advance_after_delay())
+    # Auto‑advance after timer seconds
+    async def advance_after_timeout():
+        await asyncio.sleep(timer)
+        # Only advance if still on the same question and quiz active
+        if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
+            # For group quiz: mark all unanswered users as wrong (they get 0 points and full time added)
+            # But we don't have a list of participants who haven't answered. In group quiz, participants are added only when they answer.
+            # We'll just move to next question; unanswered participants simply don't get points for this question.
+            # However, we need to record that they missed the question? Not possible. We'll just move on.
+            session["current_index"] += 1
+            await send_next_question(context, session_id)
+    asyncio.create_task(advance_after_timeout())
 
 
 async def end_quiz(context, session_id):
@@ -254,7 +281,7 @@ async def end_quiz(context, session_id):
         data = participants[uid]
         score = data["score"]
         time_str = format_time(data["total_time"])
-        text = f"🏆 *Quiz Completed!*\n\nScore: {score}/{total}\nTime taken: {time_str}"
+        text = f"🏆 *Quiz Completed!*\n\nScore: {score}/{total}\nTotal time taken: {time_str}"
         await context.bot.send_message(chat_id=session["chat_id"], text=text, parse_mode="Markdown")
 
 
@@ -308,6 +335,21 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text(f"📖 *Select Chapter for {subject}:*", parse_mode="Markdown",
                                       reply_markup=reply_markup)
         return CHAPTER
+    elif data == "quiz_back_count":
+        # Back to question count from timer selection
+        chapter = context.user_data.get("quiz_chapter")
+        keyboard = [
+            [InlineKeyboardButton("10", callback_data="quiz_count_10"),
+             InlineKeyboardButton("20", callback_data="quiz_count_20"),
+             InlineKeyboardButton("50", callback_data="quiz_count_50")],
+            [InlineKeyboardButton("70", callback_data="quiz_count_70"),
+             InlineKeyboardButton("100", callback_data="quiz_count_100"),
+             InlineKeyboardButton("Full", callback_data="quiz_count_full")],
+            [InlineKeyboardButton("🔙 Back", callback_data="quiz_back_chapter")]
+        ]
+        await query.edit_message_text(f"📊 *How many questions?* (Chapter: {chapter})", parse_mode="Markdown",
+                                      reply_markup=InlineKeyboardMarkup(keyboard))
+        return QUESTION_COUNT
     return ConversationHandler.END
 
 
@@ -327,6 +369,10 @@ chapter_quiz_conv = ConversationHandler(
         QUESTION_COUNT: [
             CallbackQueryHandler(quiz_count_callback, pattern="^quiz_count_"),
             CallbackQueryHandler(quiz_back_callback, pattern="^quiz_back_chapter$")
+        ],
+        TIMER: [
+            CallbackQueryHandler(quiz_timer_callback, pattern="^quiz_timer_"),
+            CallbackQueryHandler(quiz_back_callback, pattern="^quiz_back_count$")
         ]
     },
     fallbacks=[CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel")],
