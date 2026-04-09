@@ -145,10 +145,7 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
     count_str = query.data.split("_")[2]
-    if count_str == "full":
-        limit = None
-    else:
-        limit = int(count_str)
+    limit = None if count_str == "full" else int(count_str)
 
     subject = context.user_data["quiz_subject"]
     chapter = context.user_data["quiz_chapter"]
@@ -173,7 +170,7 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "participants": {},
         "start_time": datetime.utcnow(),
         "active": True,
-        "next_queued": False  # for group quiz: to prevent multiple advance tasks
+        "next_queued": False
     }
 
     await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\n\nFirst question coming...")
@@ -193,7 +190,6 @@ async def send_next_question(context, session_id):
     q = session["questions"][idx]
     options = q["options"]
     correct_option_id = q["correct_index"]
-    # Send poll
     message = await context.bot.send_poll(
         chat_id=session["chat_id"],
         question=q["question"],
@@ -206,19 +202,15 @@ async def send_next_question(context, session_id):
     session["current_poll_id"] = message.poll.id
     session["current_message_id"] = message.message_id
     session["current_question_start"] = datetime.utcnow()
-    session["answered_users"] = set()  # for group: track who answered this question
-    # Store session info in poll_logs so poll_answer can identify it
+    session["answered_users"] = set()
     await db.db.poll_logs.update_one(
         {"poll_id": message.poll.id},
         {"$set": {"chapter_quiz_session": session_id, "question_index": idx}},
         upsert=True
     )
-    # For group quizzes, set a timer to move to next question after a delay
     if session["is_group"]:
-        # Schedule auto-advance after 5 seconds (or after all participants answered? simple: 5 sec)
         async def advance_after_delay():
             await asyncio.sleep(5)
-            # Only advance if still on the same question
             if session.get("active") and session["current_index"] == idx:
                 session["current_index"] += 1
                 await send_next_question(context, session_id)
@@ -240,7 +232,6 @@ async def end_quiz(context, session_id):
     chapter_name = session["questions"][0]["chapter"]
 
     if is_group:
-        # Sort participants: by score desc, then total_time asc
         sorted_users = sorted(participants.items(), key=lambda x: (-x[1]["score"], x[1]["total_time"]))
         top_15 = sorted_users[:15]
         text = f"🏁 *The quiz '{chapter_name}' has finished!*\n\n{total_answered} questions answered\n\n"
@@ -277,7 +268,6 @@ async def stop_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if session["creator_id"] != user_id:
         await update.message.reply_text("Only the quiz creator can stop it.")
         return
-    # Delete the current poll message
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=session["current_message_id"])
     except:
