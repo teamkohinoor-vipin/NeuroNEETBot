@@ -170,6 +170,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
+            [InlineKeyboardButton("📚 Start Quiz", callback_data="start_chapter_quiz")],   # 👈 ADDED
         ]
 
         if question_enabled:
