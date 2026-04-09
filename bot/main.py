@@ -40,38 +40,24 @@ from bot.handlers.question_submission import (
 
 from bot.handlers.admin import admin_callback
 from bot.handlers.error import error_handler
-
 from bot.handlers.admin_stats import stats
-
 from bot.handlers.broadcast import broadcast, group_broadcast, stopbroadcast
-
-# BACKUP
 from bot.handlers.backup import backup, restore
-
-# RESET DATABASE
 from bot.handlers.reset_database import reset_database_command
-
-# ADMIN PANEL
 from bot.handlers.admin_panel import admin_panel, admin_panel_callback
-
-# TXT IMPORT
 from bot.handlers.import_txt_questions import (
     import_command,
     stop_import,
     import_txt_questions
 )
-
-# GROUP LIST FEATURE
 from bot.handlers.links import links, link_page_callback
 
-# NEW: chapter quiz handlers
+# Chapter quiz imports – no `quiz_answer_callback`
 from bot.handlers.chapter_quiz import (
     chapter_quiz_conv,
-    quiz_answer_callback,
     stop_quiz_command,
     quiz_cancel
 )
-
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -280,32 +266,24 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # ===== CHAPTER QUIZ HANDLERS ===== (ADDED)
+    # ===== CHAPTER QUIZ HANDLERS =====
     application.add_handler(chapter_quiz_conv)
-    application.add_handler(CallbackQueryHandler(quiz_answer_callback, pattern="^quiz_ans_"))
     application.add_handler(CommandHandler("stopquiz", stop_quiz_command))
     application.add_handler(CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel"))
 
-    # ===== Bot added to group =====
+    # ===== Bot added/removed handlers =====
     application.add_handler(
         ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
     )
-
-    # ===== Bot removed from group =====
     application.add_handler(
         ChatMemberHandler(bot_removed_from_group, ChatMemberHandler.MY_CHAT_MEMBER)
     )
-
-    # ===== Track groups on any message (fallback) =====
     application.add_handler(
         ChatMemberHandler(track_groups, ChatMemberHandler.MY_CHAT_MEMBER)
     )
-
     application.add_handler(
         MessageHandler(filters.ChatType.GROUPS, track_groups)
     )
-
-    # ❌ No cleanup command handler
 
     application.add_error_handler(error_handler)
 
