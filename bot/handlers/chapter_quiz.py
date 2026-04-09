@@ -8,10 +8,8 @@ from bot.database.db import db
 
 logger = logging.getLogger(__name__)
 
-# Conversation states
 SUBJECT, CHAPTER, QUESTION_COUNT, TIMER = range(4)
 
-# In‑memory chapter quiz sessions (key: chat_id)
 chapter_quiz_sessions = {}
 
 
@@ -148,7 +146,6 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     limit = None if count_str == "full" else int(count_str)
     context.user_data["quiz_limit"] = limit
 
-    # Show timer options
     keyboard = [
         [InlineKeyboardButton("15 sec", callback_data="quiz_timer_15"),
          InlineKeyboardButton("30 sec", callback_data="quiz_timer_30"),
@@ -163,7 +160,7 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    timer = int(query.data.split("_")[2])  # 15, 30, or 60
+    timer = int(query.data.split("_")[2])
     context.user_data["quiz_timer"] = timer
 
     subject = context.user_data["quiz_subject"]
@@ -191,7 +188,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "participants": {},
         "start_time": datetime.utcnow(),
         "active": True,
-        "next_queued": False
+        "timeout_task": None
     }
 
     await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\nTime per question: {timer} sec\n\nFirst question coming...")
@@ -230,18 +227,19 @@ async def send_next_question(context, session_id):
         {"$set": {"chapter_quiz_session": session_id, "question_index": idx}},
         upsert=True
     )
-    # Auto‑advance after timer seconds
-    async def advance_after_timeout():
+
+    # Create timeout task
+    async def timeout():
         await asyncio.sleep(timer)
-        # Only advance if still on the same question and quiz active
+        # Check if still on same question and quiz active
         if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
-            # For group quiz: mark all unanswered users as wrong (they get 0 points and full time added)
-            # But we don't have a list of participants who haven't answered. In group quiz, participants are added only when they answer.
-            # We'll just move to next question; unanswered participants simply don't get points for this question.
-            # However, we need to record that they missed the question? Not possible. We'll just move on.
+            session["active"] = False
+            # Move to next question
             session["current_index"] += 1
+            # For group quiz, unanswered participants simply don't get points
             await send_next_question(context, session_id)
-    asyncio.create_task(advance_after_timeout())
+    task = asyncio.create_task(timeout())
+    session["timeout_task"] = task
 
 
 async def end_quiz(context, session_id):
@@ -295,6 +293,8 @@ async def stop_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if session["creator_id"] != user_id:
         await update.message.reply_text("Only the quiz creator can stop it.")
         return
+    if session.get("timeout_task"):
+        session["timeout_task"].cancel()
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=session["current_message_id"])
     except:
@@ -336,7 +336,6 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                       reply_markup=reply_markup)
         return CHAPTER
     elif data == "quiz_back_count":
-        # Back to question count from timer selection
         chapter = context.user_data.get("quiz_chapter")
         keyboard = [
             [InlineKeyboardButton("10", callback_data="quiz_count_10"),
@@ -353,7 +352,6 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
-# Conversation handler
 chapter_quiz_conv = ConversationHandler(
     entry_points=[
         CommandHandler("startquiz", start_quiz_command),
