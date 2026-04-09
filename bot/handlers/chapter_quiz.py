@@ -160,7 +160,7 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    timer = int(query.data.split("_")[2])  # 15, 30, or 60
+    timer = int(query.data.split("_")[2])
     context.user_data["quiz_timer"] = timer
 
     subject = context.user_data["quiz_subject"]
@@ -188,6 +188,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "participants": {},
         "start_time": datetime.utcnow(),
         "active": True,
+        "waiting_for_closure": False,
         "timeout_task": None
     }
 
@@ -209,6 +210,7 @@ async def send_next_question(context, session_id):
     options = q["options"]
     correct_option_id = q["correct_index"]
     timer = session["timer"]
+
     message = await context.bot.send_poll(
         chat_id=session["chat_id"],
         question=q["question"],
@@ -216,28 +218,22 @@ async def send_next_question(context, session_id):
         type=Poll.QUIZ,
         correct_option_id=correct_option_id,
         is_anonymous=False,
-        explanation=f"Question {idx+1}/{session['total']} | ⏱️ Time limit: {timer} sec"
+        explanation=f"Question {idx+1}/{session['total']}",
+        open_period=timer   # ✅ Native countdown timer
     )
+
     session["current_poll_id"] = message.poll.id
     session["current_message_id"] = message.message_id
     session["current_question_start"] = datetime.utcnow()
     session["answered_users"] = set()
+    session["waiting_for_closure"] = True
+
     await db.db.poll_logs.update_one(
         {"poll_id": message.poll.id},
         {"$set": {"chapter_quiz_session": session_id, "question_index": idx}},
         upsert=True
     )
-
-    # ✅ Timer task – auto-advance after timer seconds
-    async def timeout():
-        await asyncio.sleep(timer)
-        # Check if still on the same question and quiz active
-        if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
-            session["active"] = False
-            session["current_index"] += 1
-            await send_next_question(context, session_id)
-    task = asyncio.create_task(timeout())
-    session["timeout_task"] = task
+    # No need for manual timeout task – Telegram handles auto‑close
 
 
 async def end_quiz(context, session_id):
