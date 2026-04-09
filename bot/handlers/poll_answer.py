@@ -61,7 +61,7 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_data = await get_user(user.id)
 
-    # ✅ FIX: Handle case when user_data is None (user never used /start)
+    # ✅ FIX: Handle case when user_data is None
     total_points = user_data.get("total_points", 0) if user_data else 0
 
     mention = f"@{user.username}" if user.username else user.first_name
