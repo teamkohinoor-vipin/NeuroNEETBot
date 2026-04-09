@@ -2,17 +2,17 @@ import asyncio
 import random
 import logging
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler
 from bot.database.db import db
 
 logger = logging.getLogger(__name__)
 
 # Conversation states
-SUBJECT, CHAPTER, QUESTION_COUNT, TIMER = range(4)
+SUBJECT, CHAPTER, QUESTION_COUNT = range(3)
 
-# In‑memory quiz sessions
-quiz_sessions = {}
+# In‑memory chapter quiz sessions (key: chat_id)
+chapter_quiz_sessions = {}
 
 
 def format_time(seconds: float) -> str:
@@ -146,36 +146,12 @@ async def quiz_count_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     count_str = query.data.split("_")[2]
     if count_str == "full":
-        context.user_data["quiz_limit"] = None
+        limit = None
     else:
-        context.user_data["quiz_limit"] = int(count_str)
+        limit = int(count_str)
 
-    keyboard = [
-        [InlineKeyboardButton("15 sec", callback_data="quiz_timer_15"),
-         InlineKeyboardButton("30 sec", callback_data="quiz_timer_30"),
-         InlineKeyboardButton("60 sec", callback_data="quiz_timer_60")],
-        [InlineKeyboardButton("🔙 Back", callback_data="quiz_back_count")]
-    ]
-    await query.edit_message_text("⏱️ *Select time per question:*", parse_mode="Markdown",
-                                  reply_markup=InlineKeyboardMarkup(keyboard))
-    return TIMER
-
-
-async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    timer = int(query.data.split("_")[2])
-    context.user_data["quiz_timer"] = timer
-    await start_quiz(update, context)
-    return ConversationHandler.END
-
-
-async def start_quiz(update, context):
-    query = update.callback_query
     subject = context.user_data["quiz_subject"]
     chapter = context.user_data["quiz_chapter"]
-    limit = context.user_data.get("quiz_limit")
-    timer = context.user_data["quiz_timer"]
     is_group = context.user_data["is_group"]
     chat_id = context.user_data["chat_id"]
     user_id = context.user_data["user_id"]
@@ -183,120 +159,74 @@ async def start_quiz(update, context):
     questions = await get_random_questions(subject, chapter, limit)
     if not questions:
         await query.edit_message_text("❌ No questions found for this chapter.")
-        return
+        return ConversationHandler.END
 
     total = len(questions)
-    session_id = chat_id if is_group else user_id
-
-    quiz_sessions[session_id] = {
+    session_id = chat_id
+    chapter_quiz_sessions[session_id] = {
         "chat_id": chat_id,
         "creator_id": user_id,
         "is_group": is_group,
         "questions": questions,
         "current_index": 0,
-        "timer": timer,
         "total": total,
         "participants": {},
         "start_time": datetime.utcnow(),
-        "active": True
+        "active": True,
+        "next_queued": False  # for group quiz: to prevent multiple advance tasks
     }
-    await send_question(context, session_id)
+
+    await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\n\nFirst question coming...")
+    await asyncio.sleep(1)
+    await send_next_question(context, session_id)
+    return ConversationHandler.END
 
 
-async def send_question(context, session_id):
-    session = quiz_sessions.get(session_id)
+async def send_next_question(context, session_id):
+    session = chapter_quiz_sessions.get(session_id)
     if not session or not session["active"]:
         return
     idx = session["current_index"]
-    total = session["total"]
+    if idx >= session["total"]:
+        await end_quiz(context, session_id)
+        return
     q = session["questions"][idx]
-    question_text = q["question"]
     options = q["options"]
-
-    keyboard = []
-    for i, opt in enumerate(options):
-        keyboard.append([InlineKeyboardButton(f"{chr(65+i)}. {opt}", callback_data=f"quiz_ans_{session_id}_{i}")])
-    keyboard.append([InlineKeyboardButton("❌ Cancel Quiz", callback_data=f"quiz_cancel_{session_id}")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    msg = await context.bot.send_message(
+    correct_option_id = q["correct_index"]
+    # Send poll
+    message = await context.bot.send_poll(
         chat_id=session["chat_id"],
-        text=f"📝 *Question {idx+1}/{total}*\n\n{question_text}\n\n⏱️ Time: {session['timer']} sec",
-        parse_mode="Markdown",
-        reply_markup=reply_markup
+        question=q["question"],
+        options=options,
+        type=Poll.QUIZ,
+        correct_option_id=correct_option_id,
+        is_anonymous=False,
+        explanation=f"Question {idx+1}/{session['total']}"
     )
-    session["current_message_id"] = msg.message_id
-    session["waiting_for"] = set()
-    session["answered_users"] = set()
-    session["question_start_time"] = datetime.utcnow()
-
-    async def timeout():
-        await asyncio.sleep(session["timer"])
-        if session_id in quiz_sessions and session["active"] and session["current_index"] == idx:
-            session["active"] = False
-            session["current_index"] += 1
-            if session["current_index"] < session["total"]:
-                session["active"] = True
-                await send_question(context, session_id)
-            else:
-                await end_quiz(context, session_id)
-    task = asyncio.create_task(timeout())
-    session["timeout_task"] = task
-
-
-async def quiz_answer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    data = query.data
-    parts = data.split("_")
-    if len(parts) < 4:
-        await query.answer("Invalid")
-        return
-    session_id = int(parts[2])
-    selected = int(parts[3])
-    session = quiz_sessions.get(session_id)
-    if not session or not session["active"]:
-        await query.answer("Quiz expired or inactive")
-        return
-
-    user = query.from_user
-    user_id = user.id
-    user_name = user.first_name or user.username or str(user_id)
-    current_q = session["questions"][session["current_index"]]
-    correct_idx = current_q["correct_index"]
-    is_correct = (selected == correct_idx)
-    time_taken = (datetime.utcnow() - session["question_start_time"]).total_seconds()
-    time_taken = min(time_taken, session["timer"])
-
+    session["current_poll_id"] = message.poll.id
+    session["current_message_id"] = message.message_id
+    session["current_question_start"] = datetime.utcnow()
+    session["answered_users"] = set()  # for group: track who answered this question
+    # Store session info in poll_logs so poll_answer can identify it
+    await db.db.poll_logs.update_one(
+        {"poll_id": message.poll.id},
+        {"$set": {"chapter_quiz_session": session_id, "question_index": idx}},
+        upsert=True
+    )
+    # For group quizzes, set a timer to move to next question after a delay
     if session["is_group"]:
-        if user_id not in session["participants"]:
-            session["participants"][user_id] = {"score": 0, "time": 0.0, "name": user_name}
-        if user_id in session.get("answered_users", set()):
-            await query.answer("You already answered this question!")
-            return
-        session["answered_users"].add(user_id)
-        if is_correct:
-            session["participants"][user_id]["score"] += 1
-        session["participants"][user_id]["time"] += time_taken
-        await query.answer(f"{'✅ Correct!' if is_correct else '❌ Wrong!'}")
-        await query.edit_message_text(f"{'✅ Correct!' if is_correct else '❌ Wrong!'}\n\nNext question will appear after timer.")
-    else:
-        if user_id not in session["participants"]:
-            session["participants"][user_id] = {"score": 0, "time": 0.0, "name": user_name}
-        if is_correct:
-            session["participants"][user_id]["score"] += 1
-        session["participants"][user_id]["time"] += time_taken
-        await query.answer(f"{'✅ Correct!' if is_correct else '❌ Wrong!'}")
-        if "timeout_task" in session:
-            session["timeout_task"].cancel()
-        session["current_index"] += 1
-        if session["current_index"] < session["total"]:
-            await send_question(context, session_id)
-        else:
-            await end_quiz(context, session_id)
+        # Schedule auto-advance after 5 seconds (or after all participants answered? simple: 5 sec)
+        async def advance_after_delay():
+            await asyncio.sleep(5)
+            # Only advance if still on the same question
+            if session.get("active") and session["current_index"] == idx:
+                session["current_index"] += 1
+                await send_next_question(context, session_id)
+        asyncio.create_task(advance_after_delay())
 
 
 async def end_quiz(context, session_id):
-    session = quiz_sessions.pop(session_id, None)
+    session = chapter_quiz_sessions.pop(session_id, None)
     if not session:
         return
     total = session["total"]
@@ -310,13 +240,14 @@ async def end_quiz(context, session_id):
     chapter_name = session["questions"][0]["chapter"]
 
     if is_group:
-        sorted_users = sorted(participants.items(), key=lambda x: (-x[1]["score"], x[1]["time"]))
+        # Sort participants: by score desc, then total_time asc
+        sorted_users = sorted(participants.items(), key=lambda x: (-x[1]["score"], x[1]["total_time"]))
         top_15 = sorted_users[:15]
         text = f"🏁 *The quiz '{chapter_name}' has finished!*\n\n{total_answered} questions answered\n\n"
         for idx, (uid, data) in enumerate(top_15, 1):
             name = data["name"]
             score = data["score"]
-            time_str = format_time(data["time"])
+            time_str = format_time(data["total_time"])
             if idx == 1:
                 text += f"🥇 {name} – {score} ({time_str})\n"
             elif idx == 2:
@@ -331,7 +262,7 @@ async def end_quiz(context, session_id):
         uid = list(participants.keys())[0]
         data = participants[uid]
         score = data["score"]
-        time_str = format_time(data["time"])
+        time_str = format_time(data["total_time"])
         text = f"🏆 *Quiz Completed!*\n\nScore: {score}/{total}\nTime taken: {time_str}"
         await context.bot.send_message(chat_id=session["chat_id"], text=text, parse_mode="Markdown")
 
@@ -339,24 +270,28 @@ async def end_quiz(context, session_id):
 async def stop_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
-    session_id = chat_id if update.effective_chat.type != "private" else user_id
-    session = quiz_sessions.get(session_id)
+    session = chapter_quiz_sessions.get(chat_id)
     if not session:
         await update.message.reply_text("No active quiz to stop.")
         return
     if session["creator_id"] != user_id:
         await update.message.reply_text("Only the quiz creator can stop it.")
         return
-    quiz_sessions.pop(session_id, None)
+    # Delete the current poll message
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=session["current_message_id"])
+    except:
+        pass
+    chapter_quiz_sessions.pop(chat_id, None)
     await update.message.reply_text("🛑 Quiz stopped by command.")
 
 
 async def quiz_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    session_id = query.message.chat.id if query.message.chat.type != "private" else query.from_user.id
-    if session_id in quiz_sessions:
-        del quiz_sessions[session_id]
+    session_id = query.message.chat.id
+    if session_id in chapter_quiz_sessions:
+        del chapter_quiz_sessions[session_id]
     await query.edit_message_text("❌ Quiz cancelled.")
     return ConversationHandler.END
 
@@ -383,20 +318,6 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text(f"📖 *Select Chapter for {subject}:*", parse_mode="Markdown",
                                       reply_markup=reply_markup)
         return CHAPTER
-    elif data == "quiz_back_count":
-        chapter = context.user_data.get("quiz_chapter")
-        keyboard = [
-            [InlineKeyboardButton("10", callback_data="quiz_count_10"),
-             InlineKeyboardButton("20", callback_data="quiz_count_20"),
-             InlineKeyboardButton("50", callback_data="quiz_count_50")],
-            [InlineKeyboardButton("70", callback_data="quiz_count_70"),
-             InlineKeyboardButton("100", callback_data="quiz_count_100"),
-             InlineKeyboardButton("Full", callback_data="quiz_count_full")],
-            [InlineKeyboardButton("🔙 Back", callback_data="quiz_back_chapter")]
-        ]
-        await query.edit_message_text(f"📊 *How many questions?* (Chapter: {chapter})", parse_mode="Markdown",
-                                      reply_markup=InlineKeyboardMarkup(keyboard))
-        return QUESTION_COUNT
     return ConversationHandler.END
 
 
@@ -416,10 +337,6 @@ chapter_quiz_conv = ConversationHandler(
         QUESTION_COUNT: [
             CallbackQueryHandler(quiz_count_callback, pattern="^quiz_count_"),
             CallbackQueryHandler(quiz_back_callback, pattern="^quiz_back_chapter$")
-        ],
-        TIMER: [
-            CallbackQueryHandler(quiz_timer_callback, pattern="^quiz_timer_"),
-            CallbackQueryHandler(quiz_back_callback, pattern="^quiz_back_count$")
         ]
     },
     fallbacks=[CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel")],
