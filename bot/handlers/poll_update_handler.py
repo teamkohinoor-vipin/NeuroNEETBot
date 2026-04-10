@@ -29,7 +29,7 @@ async def poll_update_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not had_answers:
         # No one answered this question – increment counter
         session["no_answer_counter"] = session.get("no_answer_counter", 0) + 1
-        if session["no_answer_counter"] >= 4:
+        if session["no_answer_counter"] >= 3:
             # Stop the quiz due to inactivity
             session["active"] = False
             await end_quiz(context, session_id, stopped_by_inactivity=True)
