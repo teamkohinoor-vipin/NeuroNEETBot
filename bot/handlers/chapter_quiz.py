@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 SUBJECT, CHAPTER, QUESTION_COUNT, TIMER = range(4)
 
-# Temp keys (matching question_submission.py)
 TEMP_SUBJECT = "temp_subject"
 TEMP_CLASS = "temp_class"
 TEMP_CHAPTER = "temp_chapter"
@@ -97,7 +96,7 @@ async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def quiz_subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    subject = query.data.split("_")[2]  # "quiz_subject_Physics"
+    subject = query.data.split("_")[2]
     context.user_data[TEMP_SUBJECT] = subject
 
     chapters = await get_chapters_by_subject(subject)
@@ -129,10 +128,7 @@ async def quiz_chapter_page_callback(update: Update, context: ContextTypes.DEFAU
 async def quiz_chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    # data format: "quiz_chapter_{index}"
     index = int(query.data.split("_")[2])
-    subject = context.user_data.get(TEMP_SUBJECT)
-    class_no = context.user_data.get(TEMP_CLASS)
     chapters = context.user_data.get("quiz_chapters", [])
     if not (0 <= index < len(chapters)):
         await query.edit_message_text("Invalid chapter selection.")
@@ -226,6 +222,7 @@ async def send_next_question(context, session_id):
     correct_option_id = q["correct_index"]
     timer = session["timer"]
 
+    # Send the poll
     message = await context.bot.send_poll(
         chat_id=session["chat_id"],
         question=q["question"],
@@ -249,6 +246,25 @@ async def send_next_question(context, session_id):
         upsert=True
     )
 
+    # ---------- RELIABLE TIMER FOR GROUP QUIZZES ----------
+    if session["is_group"]:
+        async def group_timer():
+            # Wait for the full timer duration
+            await asyncio.sleep(timer)
+            # Check if still on the same question and quiz active
+            if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
+                # Delete the poll message (optional)
+                try:
+                    await context.bot.delete_message(chat_id=session["chat_id"], message_id=session["current_message_id"])
+                except:
+                    pass
+                # Advance to next question
+                session["waiting_for_closure"] = False
+                session["current_index"] += 1
+                await send_next_question(context, session_id)
+        asyncio.create_task(group_timer())
+    # ---------- For private, we rely on answer callback (poll_answer) to advance ----------
+
 
 async def end_quiz(context, session_id, stopped_by_inactivity=False):
     session = chapter_quiz_sessions.pop(session_id, None)
@@ -263,7 +279,7 @@ async def end_quiz(context, session_id, stopped_by_inactivity=False):
         return
 
     if stopped_by_inactivity:
-        msg = "❌ Quiz stopped because no one participated."
+        msg = "❌ Quiz stopped because you didn't participate in 3 consecutive questions."
         await context.bot.send_message(chat_id=session["chat_id"], text=msg)
         return
 
