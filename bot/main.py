@@ -6,6 +6,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     PollAnswerHandler,
+    PollHandler,              # 👈 added for poll_update_handler
     ConversationHandler,
     MessageHandler,
     filters,
@@ -21,6 +22,7 @@ from bot.database.models import add_group, remove_group, get_config
 from bot.handlers.start import start, help_callback, help_page
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
 from bot.handlers.poll_answer import poll_answer
+from bot.handlers.poll_update_handler import poll_update_handler   # 👈 new
 
 from bot.handlers.question_submission import (
     add_question_start,
@@ -58,6 +60,7 @@ from bot.handlers.chapter_quiz import (
     stop_quiz_command,
     quiz_cancel
 )
+
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -251,6 +254,9 @@ def main():
     )
 
     application.add_handler(PollAnswerHandler(poll_answer))
+
+    # 👇 New: handler for poll updates (timed quiz closure)
+    application.add_handler(PollHandler(poll_update_handler))
 
     application.add_handler(CommandHandler("adminpanel", admin_panel))
 
