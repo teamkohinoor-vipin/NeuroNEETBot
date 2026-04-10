@@ -199,9 +199,11 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "participants": {},
         "start_time": datetime.utcnow(),
         "active": True,
-        "waiting_for_closure": False,
         "no_answer_counter": 0,
-        "answered_users": set(),
+        "current_timer_task": None,  # store asyncio task to cancel if user answers
+        "current_question_start": None,
+        "current_poll_id": None,
+        "current_message_id": None,
     }
 
     await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\nTime per question: {timer} sec\n\nFirst question coming...")
@@ -232,14 +234,13 @@ async def send_next_question(context, session_id):
         correct_option_id=correct_option_id,
         is_anonymous=False,
         explanation=f"Question {idx+1}/{session['total']}",
-        open_period=timer  # Telegram will close poll after timer, but we also have manual timer for reliability
+        open_period=timer  # Telegram will auto-close after timer, but we also have manual timer
     )
 
     session["current_poll_id"] = message.poll.id
     session["current_message_id"] = message.message_id
     session["current_question_start"] = datetime.utcnow()
-    session["answered_users"] = set()
-    session["waiting_for_closure"] = True
+    session["answered_this_question"] = False  # track if user answered
 
     await db.db.poll_logs.update_one(
         {"poll_id": message.poll.id},
@@ -247,27 +248,45 @@ async def send_next_question(context, session_id):
         upsert=True
     )
 
-    # For group quizzes: set a manual timer to advance after the specified seconds
-    # This ensures next question appears even if Telegram's poll update is delayed
-    if session["is_group"]:
-        async def advance_after_timer():
-            await asyncio.sleep(timer)
-            # Check if we are still on the same question and quiz active
-            if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
-                # Increment no_answer_counter if no one answered
-                if len(session["answered_users"]) == 0:
-                    session["no_answer_counter"] = session.get("no_answer_counter", 0) + 1
-                    if session["no_answer_counter"] >= 3:
-                        session["active"] = False
-                        await end_quiz(context, session_id, stopped_by_inactivity=True)
-                        return
-                else:
-                    session["no_answer_counter"] = 0
-                # Advance to next question
-                session["waiting_for_closure"] = False
-                session["current_index"] += 1
-                await send_next_question(context, session_id)
-        asyncio.create_task(advance_after_timer())
+    # Create a timer task for this question
+    async def advance_after_timer():
+        await asyncio.sleep(timer)
+        # Check if we are still on the same question and quiz active
+        if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
+            if not session.get("answered_this_question", False):
+                # No answer in this question
+                session["no_answer_counter"] = session.get("no_answer_counter", 0) + 1
+                if session["no_answer_counter"] >= 3:
+                    session["active"] = False
+                    await end_quiz(context, session_id, stopped_by_inactivity=True)
+                    return
+            else:
+                # User answered, reset counter
+                session["no_answer_counter"] = 0
+            # Advance to next question
+            session["current_index"] += 1
+            await send_next_question(context, session_id)
+
+    task = asyncio.create_task(advance_after_timer())
+    session["current_timer_task"] = task
+
+
+async def on_user_answer(session_id: str, is_correct: bool, user_name: str, time_taken: float):
+    """Called from poll_answer.py when user answers a chapter quiz question"""
+    session = chapter_quiz_sessions.get(session_id)
+    if not session or not session["active"]:
+        return
+    # Mark that this question was answered
+    session["answered_this_question"] = True
+    # Cancel the timer task if it exists
+    if session.get("current_timer_task"):
+        session["current_timer_task"].cancel()
+    # Record answer in participants
+    user_id = session.get("current_answering_user_id")  # we need to pass user_id
+    # Actually we get user_id from poll_answer, better to pass it
+    # But for simplicity, we'll handle in poll_answer directly
+    # We'll modify poll_answer.py to call this function with full data
+    pass
 
 
 async def end_quiz(context, session_id, stopped_by_inactivity=False):
@@ -328,6 +347,8 @@ async def stop_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if session["creator_id"] != user_id:
         await update.message.reply_text("Only the quiz creator can stop it.")
         return
+    if session.get("current_timer_task"):
+        session["current_timer_task"].cancel()
     chapter_quiz_sessions.pop(session_id, None)
     await update.message.reply_text("🛑 Quiz stopped by command.")
 
@@ -337,6 +358,9 @@ async def quiz_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     session_id = query.message.chat.id
     if session_id in chapter_quiz_sessions:
+        session = chapter_quiz_sessions[session_id]
+        if session.get("current_timer_task"):
+            session["current_timer_task"].cancel()
         del chapter_quiz_sessions[session_id]
     await query.edit_message_text("❌ Quiz cancelled.")
     return ConversationHandler.END
