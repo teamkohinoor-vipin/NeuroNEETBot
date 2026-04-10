@@ -21,24 +21,20 @@ async def get_user(user_id: int):
 
 
 async def update_user_stats(user_id: int, username: str, correct: bool, chapter: str):
-
-    # ❌ UPSERT REMOVE (IMPORTANT FIX)
+    # 🔥 FIX: upsert=True ensures user document is created if missing
+    # Combined $set and $inc in one atomic update
     await db.db.users.update_one(
         {"user_id": user_id},
         {
-            "$set": {"username": username}
-        }
+            "$set": {"username": username},
+            "$inc": {
+                "total_correct" if correct else "total_wrong": 1,
+                "total_points": 1 if correct else -1,
+                f"chapter_stats.{chapter}.correct" if correct else f"chapter_stats.{chapter}.wrong": 1
+            }
+        },
+        upsert=True
     )
-
-    update = {
-        "$inc": {
-            "total_correct" if correct else "total_wrong": 1,
-            "total_points": 1 if correct else -1,
-            f"chapter_stats.{chapter}.correct" if correct else f"chapter_stats.{chapter}.wrong": 1
-        }
-    }
-
-    await db.db.users.update_one({"user_id": user_id}, update)
 
 
 # ================= LEADERBOARD =================
