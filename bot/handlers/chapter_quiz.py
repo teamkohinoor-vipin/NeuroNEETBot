@@ -61,7 +61,6 @@ async def get_random_questions(subject, chapter, limit=None):
 
 
 async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("🔥 start_quiz_command triggered")  # DEBUG – check Railway logs
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     is_group = update.effective_chat.type != "private"
@@ -349,7 +348,7 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 chapter_quiz_conv = ConversationHandler(
     entry_points=[
         CommandHandler("startquiz", start_quiz_command),
-        CallbackQueryHandler(start_quiz_command, pattern="start_chapter_quiz")  # ✅ Simplified pattern
+        CallbackQueryHandler(start_quiz_command, pattern="start_chapter_quiz")  # ✅ simplified pattern
     ],
     states={
         SUBJECT: [CallbackQueryHandler(quiz_subject_callback, pattern="^quiz_subject_")],
