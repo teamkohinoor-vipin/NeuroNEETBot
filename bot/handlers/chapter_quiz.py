@@ -61,6 +61,8 @@ async def get_random_questions(subject, chapter, limit=None):
 
 
 async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ✅ Use effective_message (works for both command and callback)
+    msg = update.effective_message
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     is_group = update.effective_chat.type != "private"
@@ -68,7 +70,7 @@ async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if is_group:
         member = await context.bot.get_chat_member(chat_id, user_id)
         if member.status not in ["administrator", "creator"]:
-            await update.message.reply_text("❌ Only group admins can start a quiz.")
+            await msg.reply_text("❌ Only group admins can start a quiz.")
             return ConversationHandler.END
 
     context.user_data.clear()
@@ -82,8 +84,8 @@ async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
          InlineKeyboardButton("🧬 Biology", callback_data="quiz_subject_Biology")],
         [InlineKeyboardButton("❌ Cancel", callback_data="quiz_cancel")]
     ]
-    await update.message.reply_text("📚 *Select Subject for Quiz:*", parse_mode="Markdown",
-                                    reply_markup=InlineKeyboardMarkup(keyboard))
+    await msg.reply_text("📚 *Select Subject for Quiz:*", parse_mode="Markdown",
+                         reply_markup=InlineKeyboardMarkup(keyboard))
     return SUBJECT
 
 
