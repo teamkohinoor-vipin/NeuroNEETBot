@@ -64,13 +64,13 @@ Restore database by sending backup file.
 """
 📖 *Chapter Quiz – Custom Quiz System*
 
-Use `/startquiz` to start a custom quiz:
+Use /startquiz to start a custom quiz:
 - Choose subject → chapter → number of questions
 - Each question is sent as a Telegram poll
 - You answer at your own pace (no timer)
 - After all questions, you get your score and total time
 
-Use `/stopquiz` to stop an ongoing quiz.
+Use /stopquiz to stop an ongoing quiz.
 
 *Group quiz*: Only group admins can start. Multiple participants can answer, and a leaderboard with top 15 users is shown at the end (time‑based scoring).
 
