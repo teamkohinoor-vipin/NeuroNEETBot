@@ -6,7 +6,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     PollAnswerHandler,
-    PollHandler,              # 👈 added for poll_update_handler
+    PollHandler,
     ConversationHandler,
     MessageHandler,
     filters,
@@ -22,7 +22,7 @@ from bot.database.models import add_group, remove_group, get_config
 from bot.handlers.start import start, help_callback, help_page
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
 from bot.handlers.poll_answer import poll_answer
-from bot.handlers.poll_update_handler import poll_update_handler   # 👈 new
+from bot.handlers.poll_update_handler import poll_update_handler
 
 from bot.handlers.question_submission import (
     add_question_start,
@@ -54,13 +54,11 @@ from bot.handlers.import_txt_questions import (
 )
 from bot.handlers.links import links, link_page_callback
 
-# Chapter quiz imports – no `quiz_answer_callback`
 from bot.handlers.chapter_quiz import (
     chapter_quiz_conv,
     stop_quiz_command,
     quiz_cancel
 )
-
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -165,6 +163,7 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_type == "private":
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
+            [InlineKeyboardButton("📚 Start Quiz", callback_data="start_chapter_quiz")],   # ✅ ADDED
         ]
         if question_enabled:
             keyboard_buttons.append(
@@ -254,8 +253,6 @@ def main():
     )
 
     application.add_handler(PollAnswerHandler(poll_answer))
-
-    # 👇 New: handler for poll updates (timed quiz closure)
     application.add_handler(PollHandler(poll_update_handler))
 
     application.add_handler(CommandHandler("adminpanel", admin_panel))
