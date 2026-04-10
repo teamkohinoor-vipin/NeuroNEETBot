@@ -62,20 +62,6 @@ Restore database by sending backup file.
 """,
 
 """
-🏆 *Leaderboard*
-
-Compete with other students and climb the leaderboard.
-
-━━━━━━━━━━━━━━━━
-
-💡 *Tip*
-
-Practice daily quizzes to improve speed and accuracy for NEET.
-
-Good luck with your preparation 🚀
-""",
-
-"""
 📖 *Chapter Quiz – Custom Quiz System*
 
 Use `/startquiz` to start a custom quiz:
@@ -89,6 +75,20 @@ Use `/stopquiz` to stop an ongoing quiz.
 *Group quiz*: Only group admins can start. Multiple participants can answer, and a leaderboard with top 15 users is shown at the end (time‑based scoring).
 
 Enjoy practicing NEET questions!
+""",
+
+"""
+🏆 *Leaderboard*
+
+Compete with other students and climb the leaderboard.
+
+━━━━━━━━━━━━━━━━
+
+💡 *Tip*
+
+Practice daily quizzes to improve speed and accuracy for NEET.
+
+Good luck with your preparation 🚀
 """
 ]
 
