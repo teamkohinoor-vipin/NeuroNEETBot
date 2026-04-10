@@ -263,7 +263,7 @@ async def end_quiz(context, session_id, stopped_by_inactivity=False):
         return
 
     if stopped_by_inactivity:
-        msg = "❌ Quiz stopped because you didn't participate in 3 consecutive questions."
+        msg = "❌ Quiz stopped because no one participated."
         await context.bot.send_message(chat_id=session["chat_id"], text=msg)
         return
 
