@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 
 SUBJECT, CHAPTER, QUESTION_COUNT, TIMER = range(4)
 
+# Temp keys (matching question_submission.py)
+TEMP_SUBJECT = "temp_subject"
+TEMP_CLASS = "temp_class"
+TEMP_CHAPTER = "temp_chapter"
+
 chapter_quiz_sessions = {}
 
 
@@ -27,9 +32,10 @@ def build_chapter_keyboard(chapters, page=0, per_page=10):
     page_chapters = chapters[start:end]
     keyboard = []
     row = []
-    for i, ch in enumerate(page_chapters, 1):
-        row.append(InlineKeyboardButton(ch, callback_data=f"quiz_chapter_{ch}"))
-        if i % 2 == 0:
+    for i, ch in enumerate(page_chapters):
+        global_index = start + i
+        row.append(InlineKeyboardButton(ch, callback_data=f"quiz_chapter_{global_index}"))
+        if (i + 1) % 2 == 0:
             keyboard.append(row)
             row = []
     if row:
@@ -91,8 +97,8 @@ async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def quiz_subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    subject = query.data.split("_")[2]
-    context.user_data["quiz_subject"] = subject
+    subject = query.data.split("_")[2]  # "quiz_subject_Physics"
+    context.user_data[TEMP_SUBJECT] = subject
 
     chapters = await get_chapters_by_subject(subject)
     if not chapters:
@@ -114,7 +120,7 @@ async def quiz_chapter_page_callback(update: Update, context: ContextTypes.DEFAU
     chapters = context.user_data.get("quiz_chapters", [])
     context.user_data["quiz_chapter_page"] = page
     reply_markup = build_chapter_keyboard(chapters, page=page)
-    subject = context.user_data.get("quiz_subject", "")
+    subject = context.user_data.get(TEMP_SUBJECT, "")
     await query.edit_message_text(f"📖 *Select Chapter for {subject}:*", parse_mode="Markdown",
                                   reply_markup=reply_markup)
     return CHAPTER
@@ -123,8 +129,16 @@ async def quiz_chapter_page_callback(update: Update, context: ContextTypes.DEFAU
 async def quiz_chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    chapter = query.data.split("_")[2]
-    context.user_data["quiz_chapter"] = chapter
+    # data format: "quiz_chapter_{index}"
+    index = int(query.data.split("_")[2])
+    subject = context.user_data.get(TEMP_SUBJECT)
+    class_no = context.user_data.get(TEMP_CLASS)
+    chapters = context.user_data.get("quiz_chapters", [])
+    if not (0 <= index < len(chapters)):
+        await query.edit_message_text("Invalid chapter selection.")
+        return CHAPTER
+    chapter = chapters[index]
+    context.user_data[TEMP_CHAPTER] = chapter
 
     keyboard = [
         [InlineKeyboardButton("10", callback_data="quiz_count_10"),
@@ -164,8 +178,8 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     timer = int(query.data.split("_")[2])
     context.user_data["quiz_timer"] = timer
 
-    subject = context.user_data["quiz_subject"]
-    chapter = context.user_data["quiz_chapter"]
+    subject = context.user_data[TEMP_SUBJECT]
+    chapter = context.user_data[TEMP_CHAPTER]
     limit = context.user_data.get("quiz_limit")
     is_group = context.user_data["is_group"]
     chat_id = context.user_data["chat_id"]
@@ -190,7 +204,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "start_time": datetime.utcnow(),
         "active": True,
         "waiting_for_closure": False,
-        "no_answer_counter": 0,   # track consecutive unanswered questions
+        "no_answer_counter": 0,
     }
 
     await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\nTime per question: {timer} sec\n\nFirst question coming...")
@@ -249,7 +263,7 @@ async def end_quiz(context, session_id, stopped_by_inactivity=False):
         return
 
     if stopped_by_inactivity:
-        msg = "❌ Quiz stopped because no one participated."
+        msg = "❌ Quiz stopped because you didn't participate in 3 consecutive questions."
         await context.bot.send_message(chat_id=session["chat_id"], text=msg)
         return
 
@@ -329,7 +343,7 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                       reply_markup=InlineKeyboardMarkup(keyboard))
         return SUBJECT
     elif data == "quiz_back_chapter":
-        subject = context.user_data.get("quiz_subject")
+        subject = context.user_data.get(TEMP_SUBJECT)
         chapters = context.user_data.get("quiz_chapters", [])
         page = context.user_data.get("quiz_chapter_page", 0)
         reply_markup = build_chapter_keyboard(chapters, page=page)
@@ -337,7 +351,7 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                                       reply_markup=reply_markup)
         return CHAPTER
     elif data == "quiz_back_count":
-        chapter = context.user_data.get("quiz_chapter")
+        chapter = context.user_data.get(TEMP_CHAPTER)
         keyboard = [
             [InlineKeyboardButton("10", callback_data="quiz_count_10"),
              InlineKeyboardButton("20", callback_data="quiz_count_20"),
