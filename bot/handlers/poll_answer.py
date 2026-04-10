@@ -29,36 +29,50 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not poll_log:
         return
 
-    # Chapter quiz handling
+    # ---------- CHAPTER QUIZ HANDLING ----------
     if poll_log.get("chapter_quiz_session"):
         session_id = poll_log["chapter_quiz_session"]
         session = chapter_quiz_sessions.get(session_id)
         if session and session["active"]:
             q_index = poll_log["question_index"]
             if q_index != session["current_index"]:
+                # Old poll, ignore
                 return
             user_id = user.id
             user_name = user.first_name or user.username or str(user_id)
             question = session["questions"][q_index]
             correct = (selected_option == question["correct_index"])
             time_taken = (datetime.utcnow() - session["current_question_start"]).total_seconds()
+            # Cap time_taken to timer (should be less, but safe)
+            time_taken = min(time_taken, session["timer"])
+
             if session["is_group"]:
+                # Group quiz: record answer, but do NOT advance – wait for timer
                 if user_id not in session["participants"]:
                     session["participants"][user_id] = {"score": 0, "total_time": 0.0, "name": user_name}
                 if correct:
                     session["participants"][user_id]["score"] += 1
                 session["participants"][user_id]["total_time"] += time_taken
+                # Mark that this user answered to avoid duplicate processing
+                session.setdefault("answered_users", set()).add(user_id)
+                # No immediate advance; the poll will close after open_period
+                # The poll_update_handler will advance when poll closes.
+                return
             else:
+                # Private quiz: record answer and advance immediately
                 if user_id not in session["participants"]:
                     session["participants"][user_id] = {"score": 0, "total_time": 0.0, "name": user_name}
                 if correct:
                     session["participants"][user_id]["score"] += 1
                 session["participants"][user_id]["total_time"] += time_taken
+
+                # Cancel the waiting flag and advance to next question
+                session["waiting_for_closure"] = False
                 session["current_index"] += 1
                 await send_next_question(context, session_id)
-            return
+                return
 
-    # Normal scheduled quiz
+    # ---------- NORMAL SCHEDULED QUIZ ----------
     chat_id = poll_log["chat_id"]
     question = await get_question_by_poll(poll_id)
     if not question:
