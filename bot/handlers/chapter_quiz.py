@@ -61,7 +61,6 @@ async def get_random_questions(subject, chapter, limit=None):
 
 
 async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ✅ Use effective_message (works for both command and callback)
     msg = update.effective_message
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
@@ -178,7 +177,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
     total = len(questions)
-    session_id = chat_id
+    session_id = chat_id if is_group else user_id
     chapter_quiz_sessions[session_id] = {
         "chat_id": chat_id,
         "creator_id": user_id,
@@ -191,7 +190,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "start_time": datetime.utcnow(),
         "active": True,
         "waiting_for_closure": False,
-        "timeout_task": None
+        "no_answer_counter": 0,   # track consecutive unanswered questions
     }
 
     await query.edit_message_text(f"🚀 *Quiz Started!*\n\nChapter: {chapter}\nTotal questions: {total}\nTime per question: {timer} sec\n\nFirst question coming...")
@@ -237,7 +236,7 @@ async def send_next_question(context, session_id):
     )
 
 
-async def end_quiz(context, session_id):
+async def end_quiz(context, session_id, stopped_by_inactivity=False):
     session = chapter_quiz_sessions.pop(session_id, None)
     if not session:
         return
@@ -245,7 +244,13 @@ async def end_quiz(context, session_id):
     is_group = session["is_group"]
     participants = session["participants"]
     if not participants:
-        await context.bot.send_message(chat_id=session["chat_id"], text="No participants answered.")
+        msg = "❌ Quiz stopped because no one participated."
+        await context.bot.send_message(chat_id=session["chat_id"], text=msg)
+        return
+
+    if stopped_by_inactivity:
+        msg = "❌ Quiz stopped because you didn't participate in 4 consecutive questions."
+        await context.bot.send_message(chat_id=session["chat_id"], text=msg)
         return
 
     total_answered = len(participants) * total
@@ -281,7 +286,8 @@ async def end_quiz(context, session_id):
 async def stop_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
-    session = chapter_quiz_sessions.get(chat_id)
+    session_id = chat_id if update.effective_chat.type != "private" else user_id
+    session = chapter_quiz_sessions.get(session_id)
     if not session:
         await update.message.reply_text("No active quiz to stop.")
         return
@@ -294,7 +300,7 @@ async def stop_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.delete_message(chat_id=chat_id, message_id=session["current_message_id"])
     except:
         pass
-    chapter_quiz_sessions.pop(chat_id, None)
+    chapter_quiz_sessions.pop(session_id, None)
     await update.message.reply_text("🛑 Quiz stopped by command.")
 
 
@@ -350,7 +356,7 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 chapter_quiz_conv = ConversationHandler(
     entry_points=[
         CommandHandler("startquiz", start_quiz_command),
-        CallbackQueryHandler(start_quiz_command, pattern="start_chapter_quiz")  # ✅ simplified pattern
+        CallbackQueryHandler(start_quiz_command, pattern="start_chapter_quiz")
     ],
     states={
         SUBJECT: [CallbackQueryHandler(quiz_subject_callback, pattern="^quiz_subject_")],
