@@ -246,24 +246,15 @@ async def send_next_question(context, session_id):
         upsert=True
     )
 
-    # ---------- RELIABLE TIMER FOR GROUP QUIZZES ----------
+    # ========== GROUP QUIZ: NO MANUAL TIMER ==========
+    # Telegram closes poll after open_period.
+    # poll_update_handler will advance to next question.
+    # Old polls remain visible.
     if session["is_group"]:
-        async def group_timer():
-            # Wait for the full timer duration
-            await asyncio.sleep(timer)
-            # Check if still on the same question and quiz active
-            if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
-                # Delete the poll message (optional)
-                try:
-                    await context.bot.delete_message(chat_id=session["chat_id"], message_id=session["current_message_id"])
-                except:
-                    pass
-                # Advance to next question
-                session["waiting_for_closure"] = False
-                session["current_index"] += 1
-                await send_next_question(context, session_id)
-        asyncio.create_task(group_timer())
-    # ---------- For private, we rely on answer callback (poll_answer) to advance ----------
+        # Nothing extra – just wait for poll_update_handler
+        pass
+    # ========== PRIVATE QUIZ: advance immediately after answer ==========
+    # (private quiz logic remains unchanged – handled in poll_answer.py)
 
 
 async def end_quiz(context, session_id, stopped_by_inactivity=False):
