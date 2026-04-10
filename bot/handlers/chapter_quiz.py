@@ -61,6 +61,7 @@ async def get_random_questions(subject, chapter, limit=None):
 
 
 async def start_quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("🔥 start_quiz_command triggered")  # DEBUG – check Railway logs
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     is_group = update.effective_chat.type != "private"
@@ -219,7 +220,7 @@ async def send_next_question(context, session_id):
         correct_option_id=correct_option_id,
         is_anonymous=False,
         explanation=f"Question {idx+1}/{session['total']}",
-        open_period=timer   # ✅ Native countdown timer
+        open_period=timer
     )
 
     session["current_poll_id"] = message.poll.id
@@ -233,7 +234,6 @@ async def send_next_question(context, session_id):
         {"$set": {"chapter_quiz_session": session_id, "question_index": idx}},
         upsert=True
     )
-    # No need for manual timeout task – Telegram handles auto‑close
 
 
 async def end_quiz(context, session_id):
@@ -349,7 +349,7 @@ async def quiz_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 chapter_quiz_conv = ConversationHandler(
     entry_points=[
         CommandHandler("startquiz", start_quiz_command),
-        CallbackQueryHandler(start_quiz_command, pattern="^start_chapter_quiz$")
+        CallbackQueryHandler(start_quiz_command, pattern="start_chapter_quiz")  # ✅ Simplified pattern
     ],
     states={
         SUBJECT: [CallbackQueryHandler(quiz_subject_callback, pattern="^quiz_subject_")],
