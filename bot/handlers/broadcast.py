@@ -12,7 +12,7 @@ broadcast_running = False
 def get_buttons():
     keyboard = [
         [InlineKeyboardButton("➕ Add Bot", url="https://t.me/NeuroNEETBot?startgroup=true")],
-        [InlineKeyboardButton("📢 Support Channel", url="https://t.me/TeamKohinoorOfficial7")]
+        [InlineKeyboardButton("📢 Support Channel", url="https://t.me/NEET_2027_COUNTDOWN")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
