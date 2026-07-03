@@ -44,7 +44,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("❌ Not authorized.")
         return
 
-    # Toggle Question Add
     if query.data == "admin_toggle_question":
         current = await get_config("question_add_enabled", True)
         await set_config("question_add_enabled", not current)
@@ -56,7 +55,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             ]])
         )
 
-    # Toggle Answer Mentions
     elif query.data == "admin_toggle_mentions":
         current = await get_config("answer_mentions", True)
         await set_config("answer_mentions", not current)
@@ -68,7 +66,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             ]])
         )
 
-    # Set Score Delete Time
     elif query.data == "admin_set_time":
         keyboard = [
             [InlineKeyboardButton("5 seconds", callback_data="admin_time_5")],
@@ -87,7 +84,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # Preset time selection
     elif query.data.startswith("admin_time_") and query.data != "admin_time_custom":
         seconds = int(query.data.split("_")[2])
         await set_config("score_message_lifetime", seconds)
@@ -99,7 +95,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             ]])
         )
 
-    # Custom time
     elif query.data == "admin_time_custom":
         context.user_data["waiting_for_custom_time"] = True
         await query.edit_message_text(
@@ -115,9 +110,9 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
 
-    # -------- Set Question Suffix (FIXED) --------
+    # FIXED: added flag to wait for suffix input
     elif query.data == "admin_set_suffix":
-        context.user_data["waiting_for_suffix"] = True   # <-- This was missing
+        context.user_data["waiting_for_suffix"] = True
         await query.edit_message_text(
             "✏️ *Please type the suffix you want to add to every question.*\n\n"
             "Examples:\n"
@@ -129,7 +124,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
 
-    # Back to panel
     elif query.data == "admin_panel_back":
         question_add_enabled = await get_config("question_add_enabled", True)
         question_status = "✅ ON" if question_add_enabled else "❌ OFF"
@@ -157,6 +151,5 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # Close
     elif query.data == "admin_close":
         await query.delete_message()
