@@ -1,4 +1,5 @@
 import logging
+import re
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -14,10 +15,10 @@ from telegram.ext import (
     ContextTypes
 )
 
-from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME
+from bot.config import BOT_TOKEN, SUPPORT_CHANNEL, DEVELOPER_USERNAME, ADMIN_ID
 from bot.database.db import connect_db, close_db
 from bot.scheduler import start_scheduler, send_quiz_to_group
-from bot.database.models import add_group, remove_group, get_config
+from bot.database.models import add_group, remove_group, get_config, set_config
 
 from bot.handlers.start import start, help_callback, help_page
 from bot.handlers.leaderboard import leaderboard, leaderboard_callback
@@ -163,7 +164,7 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_type == "private":
         keyboard_buttons = [
             [InlineKeyboardButton("❓ Help", callback_data="help")],
-            [InlineKeyboardButton("📚 Start Quiz", callback_data="start_chapter_quiz")],   # ✅ ADDED
+            [InlineKeyboardButton("📚 Start Quiz", callback_data="start_chapter_quiz")],
         ]
         if question_enabled:
             keyboard_buttons.append(
@@ -198,6 +199,69 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ========== CUSTOM TIME PARSER ==========
+def parse_time_string(text: str) -> int:
+    """Parse a time string like '10 sec', '1 min', '5 minutes', '30' etc. Return seconds."""
+    text = text.strip().lower()
+    
+    # Try to extract number and unit
+    match = re.match(r'^(\d+)\s*(?:sec(?:onds?)?|s)?$', text)
+    if match:
+        return int(match.group(1))
+    
+    match = re.match(r'^(\d+)\s*(?:min(?:ute)?s?|m)$', text)
+    if match:
+        return int(match.group(1)) * 60
+    
+    match = re.match(r'^(\d+)\s*(?:hour|hr)s?$', text)
+    if match:
+        return int(match.group(1)) * 3600
+    
+    # If just a number, assume seconds
+    if text.isdigit():
+        return int(text)
+    
+    return None
+
+
+async def handle_custom_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle custom time input from admin."""
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return
+    
+    # Check if we are waiting for custom time
+    if not context.user_data.get("waiting_for_custom_time"):
+        return
+    
+    text = update.message.text.strip()
+    
+    # Cancel command
+    if text.lower() == "/cancel":
+        context.user_data["waiting_for_custom_time"] = False
+        await update.message.reply_text("❌ Custom time setting cancelled.")
+        return
+    
+    seconds = parse_time_string(text)
+    if seconds is None or seconds <= 0:
+        await update.message.reply_text(
+            "❌ Invalid time format. Please type something like:\n"
+            "`10 sec`, `1 min`, `5 minutes`, `30` (seconds)\n"
+            "or `/cancel` to cancel."
+        )
+        return
+    
+    # Save the time
+    await set_config("score_message_lifetime", seconds)
+    context.user_data["waiting_for_custom_time"] = False
+    
+    await update.message.reply_text(
+        f"✅ Score message delete time set to **{seconds} seconds**.",
+        parse_mode="Markdown"
+    )
+
+
+# ========== MAIN ==========
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -258,7 +322,7 @@ def main():
     application.add_handler(CommandHandler("adminpanel", admin_panel))
 
     application.add_handler(
-        CallbackQueryHandler(admin_panel_callback, pattern="^admin_(toggle|panel|close)")
+        CallbackQueryHandler(admin_panel_callback, pattern="^admin_(toggle|panel|close|time|set_)")
     )
 
     application.add_handler(
@@ -273,6 +337,11 @@ def main():
     application.add_handler(chapter_quiz_conv)
     application.add_handler(CommandHandler("stopquiz", stop_quiz_command))
     application.add_handler(CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel"))
+
+    # ===== CUSTOM TIME INPUT HANDLER =====
+    application.add_handler(
+        MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_custom_time_input)
+    )
 
     # ===== Bot added/removed handlers =====
     application.add_handler(
