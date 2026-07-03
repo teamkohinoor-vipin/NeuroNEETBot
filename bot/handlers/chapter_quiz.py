@@ -5,6 +5,7 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler
 from bot.database.db import db
+from bot.database.models import get_config  # <-- new import
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "start_time": datetime.utcnow(),
         "active": True,
         "no_answer_counter": 0,
-        "current_timer_task": None,  # store asyncio task to cancel if user answers
+        "current_timer_task": None,
         "current_question_start": None,
         "current_poll_id": None,
         "current_message_id": None,
@@ -212,6 +213,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
+# ========== UPDATED send_next_question ==========
 async def send_next_question(context, session_id):
     session = chapter_quiz_sessions.get(session_id)
     if not session or not session["active"]:
@@ -225,22 +227,30 @@ async def send_next_question(context, session_id):
     correct_option_id = q["correct_index"]
     timer = session["timer"]
 
+    # 🔥 NEW: Read suffix from config
+    suffix = await get_config("question_suffix", "")
+    question_text = q["question"]
+    if suffix:
+        question_text = f"{question_text} {suffix}"
+
     # Send the poll
     message = await context.bot.send_poll(
         chat_id=session["chat_id"],
-        question=q["question"],
+        question=question_text,
         options=options,
         type=Poll.QUIZ,
         correct_option_id=correct_option_id,
         is_anonymous=False,
         explanation=f"Question {idx+1}/{session['total']}",
-        open_period=timer  # Telegram will auto-close after timer, but we also have manual timer
+        open_period=timer
     )
 
     session["current_poll_id"] = message.poll.id
     session["current_message_id"] = message.message_id
     session["current_question_start"] = datetime.utcnow()
-    session["answered_this_question"] = False  # track if user answered
+    session["answered_this_question"] = False
+    # 🔥 NEW: Set waiting_for_closure flag
+    session["waiting_for_closure"] = True
 
     await db.db.poll_logs.update_one(
         {"poll_id": message.poll.id},
@@ -251,24 +261,21 @@ async def send_next_question(context, session_id):
     # Create a timer task for this question
     async def advance_after_timer():
         await asyncio.sleep(timer)
-        # Check if we are still on the same question and quiz active
         if session_id in chapter_quiz_sessions and session["active"] and session["current_index"] == idx:
             if not session.get("answered_this_question", False):
-                # No answer in this question
                 session["no_answer_counter"] = session.get("no_answer_counter", 0) + 1
                 if session["no_answer_counter"] >= 3:
                     session["active"] = False
                     await end_quiz(context, session_id, stopped_by_inactivity=True)
                     return
             else:
-                # User answered, reset counter
                 session["no_answer_counter"] = 0
-            # Advance to next question
             session["current_index"] += 1
             await send_next_question(context, session_id)
 
     task = asyncio.create_task(advance_after_timer())
     session["current_timer_task"] = task
+# ========== END UPDATED send_next_question ==========
 
 
 async def on_user_answer(session_id: str, is_correct: bool, user_name: str, time_taken: float):
@@ -276,16 +283,10 @@ async def on_user_answer(session_id: str, is_correct: bool, user_name: str, time
     session = chapter_quiz_sessions.get(session_id)
     if not session or not session["active"]:
         return
-    # Mark that this question was answered
     session["answered_this_question"] = True
-    # Cancel the timer task if it exists
     if session.get("current_timer_task"):
         session["current_timer_task"].cancel()
-    # Record answer in participants
-    user_id = session.get("current_answering_user_id")  # we need to pass user_id
-    # Actually we get user_id from poll_answer, better to pass it
-    # But for simplicity, we'll handle in poll_answer directly
-    # We'll modify poll_answer.py to call this function with full data
+    # Not used, kept as placeholder
     pass
 
 
