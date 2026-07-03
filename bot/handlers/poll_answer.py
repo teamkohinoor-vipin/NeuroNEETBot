@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 from telegram import Update
@@ -19,6 +20,18 @@ logger = logging.getLogger(__name__)
 score_messages = {}
 
 
+async def delete_message_after(delay: int, bot, chat_id: int, msg_id: int):
+    """Delete a score message after specified delay."""
+    await asyncio.sleep(delay)
+    try:
+        await bot.delete_message(chat_id, msg_id)
+    except Exception:
+        pass
+    # Clean up from tracking list
+    if chat_id in score_messages and msg_id in score_messages[chat_id]:
+        score_messages[chat_id].remove(msg_id)
+
+
 async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
     user = answer.user
@@ -36,7 +49,6 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if session and session["active"]:
             q_index = poll_log["question_index"]
             if q_index != session["current_index"]:
-                # Old poll, ignore
                 return
             user_id = user.id
             user_name = user.first_name or user.username or str(user_id)
@@ -44,50 +56,41 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             correct = (selected_option == question["correct_index"])
             time_taken = (datetime.utcnow() - session["current_question_start"]).total_seconds()
             time_taken = min(time_taken, session["timer"])
-
-            # 🔥 NEW: Mark that this question was answered and reset inactivity counter
             session["answered_this_question"] = True
             session["no_answer_counter"] = 0
 
             if session["is_group"]:
-                # Group quiz: record answer, do NOT advance – wait for timer
                 if user_id not in session["participants"]:
                     session["participants"][user_id] = {"score": 0, "total_time": 0.0, "name": user_name}
                 if correct:
                     session["participants"][user_id]["score"] += 1
                 session["participants"][user_id]["total_time"] += time_taken
                 session.setdefault("answered_users", set()).add(user_id)
-                # Timer will advance after its sleep, but it will see answered_this_question=True and reset counter
                 return
             else:
-                # Private quiz: record answer, cancel timer, advance immediately
-                # 🔥 Cancel the timer task to avoid duplicate advancement
                 if session.get("current_timer_task"):
                     try:
                         session["current_timer_task"].cancel()
                     except:
                         pass
                     session["current_timer_task"] = None
-
                 if user_id not in session["participants"]:
                     session["participants"][user_id] = {"score": 0, "total_time": 0.0, "name": user_name}
                 if correct:
                     session["participants"][user_id]["score"] += 1
                 session["participants"][user_id]["total_time"] += time_taken
-
-                # Advance to next question immediately
                 session["current_index"] += 1
                 await send_next_question(context, session_id)
                 return
 
-    # ---------- NORMAL SCHEDULED QUIZ (unchanged) ----------
+    # ---------- NORMAL SCHEDULED QUIZ ----------
     chat_id = poll_log["chat_id"]
     question = await get_question_by_poll(poll_id)
     if not question:
         return
 
     correct_index = question["correct_index"]
-    is_correct = selected_option == correct_index
+    is_correct = (selected_option == correct_index)
     points_change = 1 if is_correct else -1
 
     await update_user_stats(
@@ -115,8 +118,14 @@ async def poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mention_enabled = await get_config("answer_mentions", True)
     if mention_enabled:
         msg = await context.bot.send_message(chat_id=chat_id, text=text)
+        
+        # Track for fallback cleanup
         if chat_id not in score_messages:
             score_messages[chat_id] = []
         score_messages[chat_id].append(msg.message_id)
         if len(score_messages[chat_id]) > 50:
             score_messages[chat_id].pop(0)
+        
+        # 🔥 Schedule auto-delete
+        lifetime = await get_config("score_message_lifetime", 10)  # default 10 sec
+        asyncio.create_task(delete_message_after(lifetime, context.bot, chat_id, msg.message_id))
