@@ -20,10 +20,14 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     score_lifetime = await get_config("score_message_lifetime", 10)
     time_display = f"{score_lifetime}s"
 
+    current_suffix = await get_config("question_suffix", "")
+    suffix_display = current_suffix if current_suffix else "None"
+
     keyboard = [
         [InlineKeyboardButton(f"Toggle Question Add ({question_status})", callback_data="admin_toggle_question")],
         [InlineKeyboardButton(f"Answer Mentions ({mention_status})", callback_data="admin_toggle_mentions")],
         [InlineKeyboardButton(f"⏱️ Score Msg Delete ({time_display})", callback_data="admin_set_time")],
+        [InlineKeyboardButton(f"✏️ Question Suffix ({suffix_display})", callback_data="admin_set_suffix")],
         [InlineKeyboardButton("Close", callback_data="admin_close")]
     ]
 
@@ -100,7 +104,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # -------- Handle Custom time button --------
     elif query.data == "admin_time_custom":
-        # Set a flag so that the message handler knows we're waiting for custom time
         context.user_data["waiting_for_custom_time"] = True
         await query.edit_message_text(
             "✏️ *Please type your desired time.*\n\n"
@@ -114,7 +117,20 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "Type `/cancel` to cancel.",
             parse_mode="Markdown"
         )
-        # We don't go back to panel; the message handler will handle the input.
+
+    # -------- Set Question Suffix --------
+    elif query.data == "admin_set_suffix":
+        context.user_data["waiting_for_suffix"] = True
+        await query.edit_message_text(
+            "✏️ *Please type the suffix you want to add to every question.*\n\n"
+            "Examples:\n"
+            "`[Team Kohinoor]`\n"
+            "`#NEETQuiz`\n"
+            "`Powered by NeuroNEET`\n\n"
+            "Type `none` to remove suffix.\n"
+            "Type `/cancel` to cancel.",
+            parse_mode="Markdown"
+        )
 
     # -------- Back to panel --------
     elif query.data == "admin_panel_back":
@@ -127,10 +143,14 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         score_lifetime = await get_config("score_message_lifetime", 10)
         time_display = f"{score_lifetime}s"
 
+        current_suffix = await get_config("question_suffix", "")
+        suffix_display = current_suffix if current_suffix else "None"
+
         keyboard = [
             [InlineKeyboardButton(f"Toggle Question Add ({question_status})", callback_data="admin_toggle_question")],
             [InlineKeyboardButton(f"Answer Mentions ({mention_status})", callback_data="admin_toggle_mentions")],
             [InlineKeyboardButton(f"⏱️ Score Msg Delete ({time_display})", callback_data="admin_set_time")],
+            [InlineKeyboardButton(f"✏️ Question Suffix ({suffix_display})", callback_data="admin_set_suffix")],
             [InlineKeyboardButton("Close", callback_data="admin_close")]
         ]
 
