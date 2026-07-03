@@ -8,7 +8,6 @@ import asyncio
 
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES
 from bot.database.models import get_random_question, log_poll, get_all_groups
-from bot.handlers.poll_answer import score_messages
 from bot.handlers.backup import backup
 
 logger = logging.getLogger(__name__)
@@ -41,17 +40,6 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
                 await bot.delete_message(chat_id, last_polls[chat_id])
             except:
                 pass
-
-        # delete score messages
-        if chat_id in score_messages:
-
-            for msg_id in score_messages[chat_id]:
-                try:
-                    await bot.delete_message(chat_id, msg_id)
-                except:
-                    pass
-
-            score_messages[chat_id] = []
 
         message = await bot.send_poll(
             chat_id=chat_id,
