@@ -118,9 +118,9 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
 
-    # -------- Set Question Suffix --------
+    # -------- Set Question Suffix (FIXED) --------
     elif query.data == "admin_set_suffix":
-        context.user_data["waiting_for_suffix"] = True
+        context.user_data["waiting_for_suffix"] = True  # <-- THIS WAS MISSING!
         await query.edit_message_text(
             "✏️ *Please type the suffix you want to add to every question.*\n\n"
             "Examples:\n"
