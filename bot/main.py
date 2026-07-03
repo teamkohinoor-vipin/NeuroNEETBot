@@ -204,7 +204,6 @@ def parse_time_string(text: str) -> int:
     """Parse a time string like '10 sec', '1 min', '5 minutes', '30' etc. Return seconds."""
     text = text.strip().lower()
     
-    # Try to extract number and unit
     match = re.match(r'^(\d+)\s*(?:sec(?:onds?)?|s)?$', text)
     if match:
         return int(match.group(1))
@@ -217,7 +216,6 @@ def parse_time_string(text: str) -> int:
     if match:
         return int(match.group(1)) * 3600
     
-    # If just a number, assume seconds
     if text.isdigit():
         return int(text)
     
@@ -230,13 +228,11 @@ async def handle_custom_time_input(update: Update, context: ContextTypes.DEFAULT
     if user_id != ADMIN_ID:
         return
     
-    # Check if we are waiting for custom time
     if not context.user_data.get("waiting_for_custom_time"):
         return
     
     text = update.message.text.strip()
     
-    # Cancel command
     if text.lower() == "/cancel":
         context.user_data["waiting_for_custom_time"] = False
         await update.message.reply_text("❌ Custom time setting cancelled.")
@@ -251,12 +247,41 @@ async def handle_custom_time_input(update: Update, context: ContextTypes.DEFAULT
         )
         return
     
-    # Save the time
     await set_config("score_message_lifetime", seconds)
     context.user_data["waiting_for_custom_time"] = False
     
     await update.message.reply_text(
         f"✅ Score message delete time set to **{seconds} seconds**.",
+        parse_mode="Markdown"
+    )
+
+
+async def handle_suffix_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle custom suffix input from admin."""
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return
+    
+    if not context.user_data.get("waiting_for_suffix"):
+        return
+    
+    text = update.message.text.strip()
+    
+    if text.lower() == "/cancel":
+        context.user_data["waiting_for_suffix"] = False
+        await update.message.reply_text("❌ Suffix setting cancelled.")
+        return
+    
+    if text.lower() == "none":
+        await set_config("question_suffix", "")
+        context.user_data["waiting_for_suffix"] = False
+        await update.message.reply_text("✅ Question suffix removed.")
+        return
+    
+    await set_config("question_suffix", text)
+    context.user_data["waiting_for_suffix"] = False
+    await update.message.reply_text(
+        f"✅ Question suffix set to: `{text}`",
         parse_mode="Markdown"
     )
 
@@ -338,9 +363,12 @@ def main():
     application.add_handler(CommandHandler("stopquiz", stop_quiz_command))
     application.add_handler(CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel"))
 
-    # ===== CUSTOM TIME INPUT HANDLER =====
+    # ===== CUSTOM TIME & SUFFIX INPUT HANDLERS =====
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_custom_time_input)
+    )
+    application.add_handler(
+        MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_suffix_input)
     )
 
     # ===== Bot added/removed handlers =====
