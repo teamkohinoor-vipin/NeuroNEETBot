@@ -7,7 +7,7 @@ import random
 import asyncio
 
 from bot.config import TIMEZONE, QUIZ_INTERVAL_MINUTES
-from bot.database.models import get_random_question, log_poll, get_all_groups
+from bot.database.models import get_random_question, log_poll, get_all_groups, get_config
 from bot.handlers.backup import backup
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,12 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
         options = question["options"]
         correct_option_id = question["correct_index"]
 
+        # Read suffix from config
+        suffix = await get_config("question_suffix", "")
+        question_text = question["question"]
+        if suffix:
+            question_text = f"{question_text} {suffix}"
+
         # delete previous poll
         if chat_id in last_polls:
             try:
@@ -43,7 +49,7 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
 
         message = await bot.send_poll(
             chat_id=chat_id,
-            question=question["question"],
+            question=question_text,
             options=options,
             type=Poll.QUIZ,
             correct_option_id=correct_option_id,
