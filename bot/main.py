@@ -350,7 +350,7 @@ def main():
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_custom_time_input)
     )
-    # 👇 New suffix handler registered here
+    # 👇 Suffix handler registered
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_suffix_input)
     )
