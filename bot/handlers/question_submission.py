@@ -17,7 +17,10 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     context.user_data.clear()
 
-    # 👇 NEW: Check if question submission is enabled
+    # 🔥 SET FLAG: User is in question submission
+    context.user_data["in_question_submission"] = True
+
+    # Check if question submission is enabled
     from bot.database.models import get_config
     enabled = await get_config("question_add_enabled", True)
     if not enabled:
@@ -30,9 +33,9 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
 
     keyboard = [
-        [InlineKeyboardButton("⚛️Physics", callback_data="sub_Physics")],
-        [InlineKeyboardButton("🧪Chemistry", callback_data="sub_Chemistry")],
-        [InlineKeyboardButton("🧬Biology", callback_data="sub_Biology")]
+        [InlineKeyboardButton("⚛️ Physics", callback_data="sub_Physics")],
+        [InlineKeyboardButton("🧪 Chemistry", callback_data="sub_Chemistry")],
+        [InlineKeyboardButton("🧬 Biology", callback_data="sub_Biology")]
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -40,7 +43,6 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if update.callback_query:
         query = update.callback_query
         await query.answer()
-
         await query.edit_message_text(
             "📚 Please select the subject given below:",
             reply_markup=reply_markup
@@ -63,12 +65,12 @@ async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data[TEMP_SUBJECT] = subject
 
     keyboard = [
-        [InlineKeyboardButton("🔘Class 11", callback_data="class_11")],
-        [InlineKeyboardButton("🔘Class 12", callback_data="class_12")]
+        [InlineKeyboardButton("🔘 Class 11", callback_data="class_11")],
+        [InlineKeyboardButton("🔘 Class 12", callback_data="class_12")]
     ]
 
     await query.edit_message_text(
-        "🎉Please select the class given below:",
+        "🎉 Please select the class given below:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -87,12 +89,12 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         await query.edit_message_text(
-            "🎯Please Select Chapter Name:",
+            "🎯 Please Select Chapter Name:",
             reply_markup=chapter_menu(subject, class_, 0)
         )
     except:
         await query.message.reply_text(
-            "🎯Please Select Chapter Name:",
+            "🎯 Please Select Chapter Name:",
             reply_markup=chapter_menu(subject, class_, 0)
         )
 
@@ -111,7 +113,7 @@ async def chapter_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     page = int(data[3])
 
     await query.edit_message_text(
-        "🎯Please Select Chapter Name:",
+        "🎯 Please Select Chapter Name:",
         reply_markup=chapter_menu(subject, class_, page)
     )
 
@@ -216,18 +218,19 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     from bot.handlers.admin import admin_review_keyboard
 
     admin_text = (
-        f"New question batch from @{update.effective_user.username} "
-        f"(ID: {update.effective_user.id})\n"
-        f"Subject: {batch['subject']}\n"
-        f"Class: {batch['class']}\n"
-        f"Chapter: {batch['chapter']}\n"
-        f"Total questions: {len(batch['questions'])}\n\n"
-        "Use buttons to review."
+        f"📝 *New Question Batch*\n\n"
+        f"👤 From: @{update.effective_user.username} (ID: {update.effective_user.id})\n"
+        f"📚 Subject: {batch['subject']}\n"
+        f"🔘 Class: {batch['class']}\n"
+        f"📖 Chapter: {batch['chapter']}\n"
+        f"📊 Total questions: {len(batch['questions'])}\n\n"
+        "Use buttons below to review each question."
     )
 
     await context.bot.send_message(
         chat_id=ADMIN_ID,
         text=admin_text,
+        parse_mode="Markdown",
         reply_markup=admin_review_keyboard(
             str(batch_id),
             0,
@@ -240,6 +243,8 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode="Markdown"
     )
 
+    # 🔥 CLEAR FLAG before clearing everything
+    context.user_data["in_question_submission"] = False
     context.user_data.clear()
 
     return ConversationHandler.END
@@ -249,6 +254,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Question submission cancelled.")
 
+    # 🔥 CLEAR FLAG before clearing everything
+    context.user_data["in_question_submission"] = False
     context.user_data.clear()
 
     return ConversationHandler.END
