@@ -296,13 +296,6 @@ def main():
     application.post_init = connect_db
     application.post_shutdown = close_db
 
-    # 🔥 FIX: Properly start scheduler using asyncio.create_task
-    if application.job_queue:
-        application.job_queue.run_once(
-            lambda ctx: asyncio.create_task(start_scheduler(ctx.bot)),
-            when=5
-        )
-
     # -------- COMMAND HANDLERS --------
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
@@ -430,6 +423,11 @@ def main():
     application.add_error_handler(error_handler)
 
     logger.info("🤖 Bot started")
+
+    # 🔥 FIX: Start scheduler directly using asyncio.create_task
+    # This ensures it runs in the background after the bot starts
+    loop = asyncio.get_event_loop()
+    asyncio.create_task(start_scheduler(application.bot))
 
     application.run_polling(drop_pending_updates=True)
 
