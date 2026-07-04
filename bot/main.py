@@ -1,5 +1,11 @@
 import logging
+import warnings
 import re
+
+# 🔥 SUPPRESS WARNINGS AT MODULE IMPORT LEVEL
+warnings.filterwarnings("ignore")
+logging.getLogger("pymongo").setLevel(logging.ERROR)
+logging.getLogger("motor").setLevel(logging.ERROR)
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -223,7 +229,6 @@ async def handle_suffix_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_id != ADMIN_ID:
         return
 
-    # 🔥 CHECK: If user is in question submission, ignore suffix
     if context.user_data.get("in_question_submission"):
         return
 
@@ -356,7 +361,6 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # 🔥 NEW: Add Question button callback handler
     application.add_handler(
         CallbackQueryHandler(add_question_start, pattern="^add_question$")
     )
