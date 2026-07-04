@@ -5,7 +5,6 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Poll
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler
 from bot.database.db import db
-from bot.database.models import get_config  # <-- new import
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +212,7 @@ async def quiz_timer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
-# ========== UPDATED send_next_question ==========
+# ========== UPDATED send_next_question with suffix logic ==========
 async def send_next_question(context, session_id):
     session = chapter_quiz_sessions.get(session_id)
     if not session or not session["active"]:
@@ -227,11 +226,20 @@ async def send_next_question(context, session_id):
     correct_option_id = q["correct_index"]
     timer = session["timer"]
 
-    # 🔥 NEW: Read suffix from config
+    # 🔥 SUFFIX LOGIC
+    from bot.database.models import get_config
     suffix = await get_config("question_suffix", "")
     question_text = q["question"]
+    
+    # For private/DM quizzes: suffix ALWAYS applies
+    # For group quizzes: suffix applies only if suffix_for_groups = True
     if suffix:
-        question_text = f"{question_text} {suffix}"
+        if not session["is_group"]:  # Private chat
+            question_text = f"{question_text} {suffix}"
+        else:  # Group chat
+            suffix_for_groups = await get_config("suffix_for_groups", True)
+            if suffix_for_groups:
+                question_text = f"{question_text} {suffix}"
 
     # Send the poll
     message = await context.bot.send_poll(
@@ -249,7 +257,6 @@ async def send_next_question(context, session_id):
     session["current_message_id"] = message.message_id
     session["current_question_start"] = datetime.utcnow()
     session["answered_this_question"] = False
-    # 🔥 NEW: Set waiting_for_closure flag
     session["waiting_for_closure"] = True
 
     await db.db.poll_logs.update_one(
@@ -286,7 +293,6 @@ async def on_user_answer(session_id: str, is_correct: bool, user_name: str, time
     session["answered_this_question"] = True
     if session.get("current_timer_task"):
         session["current_timer_task"].cancel()
-    # Not used, kept as placeholder
     pass
 
 
