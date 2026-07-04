@@ -39,12 +39,10 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
         options = question["options"]
         correct_option_id = question["correct_index"]
 
-        # Truncate options if needed
         if any(len(opt) > MAX_OPTION_LENGTH for opt in options):
             options = truncate_options(options)
             logger.debug(f"Truncated options for group {chat_id}")
 
-        # 🔥 SUFFIX FOR GROUPS - check config
         suffix = await get_config("question_suffix", "")
         suffix_for_groups = await get_config("suffix_for_groups", True)
         
@@ -52,14 +50,12 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
         if suffix and suffix_for_groups:
             question_text = f"{question_text} {suffix}"
 
-        # Delete previous poll
         if chat_id in last_polls:
             try:
                 await bot.delete_message(chat_id, last_polls[chat_id])
             except Exception:
                 pass
 
-        # Send new poll
         message = await bot.send_poll(
             chat_id=chat_id,
             question=question_text,
@@ -86,7 +82,6 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
         error_msg = str(e)
         logger.warning(f"Quiz failed in group {chat_id}: {error_msg}")
 
-        # Group migration
         match = re.search(r"New chat id: (-\d+)", error_msg)
         if match:
             new_chat_id = int(match.group(1))
@@ -95,13 +90,11 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
             await add_group(new_chat_id)
             return
 
-        # Remove if kicked/deleted
         if "bot was kicked" in error_msg or "group chat was deleted" in error_msg:
             logger.info(f"🗑️ Removing invalid group {chat_id}")
             await remove_group(chat_id)
             return
 
-        # Other errors
         logger.error(f"Unhandled error for group {chat_id}: {error_msg}", exc_info=True)
 
 
@@ -126,12 +119,14 @@ async def start_scheduler(bot: Bot):
             logger.info("⏰ Scheduler already running")
             return
 
+        # 🔥 FIX: Add misfire_grace_time to prevent missed job warnings
         scheduler.add_job(
             send_quiz,
             trigger=IntervalTrigger(minutes=QUIZ_INTERVAL_MINUTES),
             args=[bot],
             id="quiz_job",
-            replace_existing=True
+            replace_existing=True,
+            misfire_grace_time=60  # Wait up to 60 seconds for missed jobs
         )
 
         scheduler.add_job(
@@ -139,7 +134,8 @@ async def start_scheduler(bot: Bot):
             trigger=IntervalTrigger(hours=24),
             args=[None, None],
             id="backup_job",
-            replace_existing=True
+            replace_existing=True,
+            misfire_grace_time=3600  # 1 hour grace for backup
         )
 
         scheduler.start()
