@@ -8,6 +8,28 @@ class Database:
 db = Database()
 
 
+async def ensure_index(collection, keys, unique=False):
+    """
+    Safely create an index only if it doesn't already exist with the same keys.
+    This prevents 'Index already exists with a different name' warnings.
+    
+    Args:
+        collection: MongoDB collection object
+        keys: List of (field, direction) tuples, e.g., [("poll_id", 1)]
+        unique: Boolean for unique index
+    """
+    existing = await collection.index_information()
+    
+    # Check if an index with the same key (fields) already exists
+    for idx_name, idx_info in existing.items():
+        if idx_info.get("key") == keys:
+            # Index already exists with these exact keys, skip creation
+            return
+    
+    # No index found with these keys, create it
+    await collection.create_index(keys, unique=unique)
+
+
 async def connect_db(app=None):
     db.client = AsyncIOMotorClient(
         MONGO_URI,
@@ -47,26 +69,37 @@ async def connect_db(app=None):
         print(f"⚠️ Duplicate removal warning: {e}")
 
     # -----------------------------------------------------------------
-    # Step 2: Create unique index on user_id (prevents future duplicates)
+    # Step 2: Create unique index on user_id
     # -----------------------------------------------------------------
     try:
-        await db.db.users.create_index("user_id", unique=True)
-        print("✅ Unique index on users.user_id created")
+        await ensure_index(db.db.users, [("user_id", 1)], unique=True)
+        print("✅ Unique index on users.user_id created/verified")
     except Exception as e:
         print(f"⚠️ Index creation warning: {e}")
 
     # -----------------------------------------------------------------
-    # Step 3: Other performance indexes (ignore conflicts)
+    # Step 3: Other performance indexes (check before creating)
     # -----------------------------------------------------------------
     try:
-        await db.db.poll_logs.create_index("poll_id")
-        await db.db.poll_logs.create_index("chat_id")
-        await db.db.questions.create_index("subject")
-        await db.db.questions.create_index("approved")
-        await db.db.pending_batches.create_index("status")
-        await db.db.answers.create_index("chat_id")
-        await db.db.answers.create_index("timestamp")
+        # Poll logs
+        await ensure_index(db.db.poll_logs, [("poll_id", 1)])
+        await ensure_index(db.db.poll_logs, [("chat_id", 1)])
+        
+        # Questions
+        await ensure_index(db.db.questions, [("subject", 1)])
+        await ensure_index(db.db.questions, [("approved", 1)])
+        
+        # Pending batches
+        await ensure_index(db.db.pending_batches, [("status", 1)])
+        
+        # Answers
+        await ensure_index(db.db.answers, [("chat_id", 1)])
+        await ensure_index(db.db.answers, [("timestamp", 1)])
+        
+        print("✅ All indexes created/verified")
+
     except Exception as e:
+        # This will only catch unexpected errors now
         print(f"⚠️ Performance index warning: {e}")
 
     print("✅ MongoDB connected and indexes ready")
