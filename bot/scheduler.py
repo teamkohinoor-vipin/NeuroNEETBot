@@ -27,7 +27,10 @@ def truncate_options(options):
 
 
 async def send_quiz_to_group(chat_id: int, bot: Bot):
+    """Send a single quiz to a group."""
     try:
+        logger.info(f"🔄 Sending quiz to group {chat_id}")
+
         subject = random.choice(SUBJECTS)
 
         question = await get_random_question(subject, chat_id)
@@ -50,12 +53,14 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
         if suffix and suffix_for_groups:
             question_text = f"{question_text} {suffix}"
 
+        # Delete previous poll
         if chat_id in last_polls:
             try:
                 await bot.delete_message(chat_id, last_polls[chat_id])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not delete previous poll in {chat_id}: {e}")
 
+        # Send new poll
         message = await bot.send_poll(
             chat_id=chat_id,
             question=question_text,
@@ -80,8 +85,9 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
 
     except Exception as e:
         error_msg = str(e)
-        logger.warning(f"Quiz failed in group {chat_id}: {error_msg}")
+        logger.error(f"❌ Quiz failed in group {chat_id}: {error_msg}", exc_info=True)
 
+        # Group migration
         match = re.search(r"New chat id: (-\d+)", error_msg)
         if match:
             new_chat_id = int(match.group(1))
@@ -90,43 +96,51 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
             await add_group(new_chat_id)
             return
 
+        # Remove if kicked/deleted
         if "bot was kicked" in error_msg or "group chat was deleted" in error_msg:
             logger.info(f"🗑️ Removing invalid group {chat_id}")
             await remove_group(chat_id)
             return
 
+        # Other errors
         logger.error(f"Unhandled error for group {chat_id}: {error_msg}", exc_info=True)
 
 
 async def send_quiz(bot: Bot):
+    """Send quiz to all groups."""
     try:
         groups = await get_all_groups()
         logger.info(f"📋 Found {len(groups)} groups to send quiz")
+
         if not groups:
-            logger.warning("⚠️ No groups found. Quiz not sent.")
+            logger.warning("⚠️ No groups found in database. Quiz not sent.")
             return
+
         for chat_id in groups:
             await send_quiz_to_group(chat_id, bot)
-            await asyncio.sleep(0.7)
-        logger.info("✅ Quiz sent to all groups")
+            await asyncio.sleep(0.7)  # Rate limit
+
+        logger.info(f"✅ Quiz sent to all {len(groups)} groups")
+
     except Exception as e:
         logger.error(f"❌ Error in send_quiz: {e}", exc_info=True)
 
 
 async def start_scheduler(bot: Bot):
+    """Start the scheduler and send an immediate test quiz."""
     try:
         if scheduler.running:
             logger.info("⏰ Scheduler already running")
             return
 
-        # 🔥 FIX: Add misfire_grace_time to prevent missed job warnings
+        # Schedule the quiz job
         scheduler.add_job(
             send_quiz,
             trigger=IntervalTrigger(minutes=QUIZ_INTERVAL_MINUTES),
             args=[bot],
             id="quiz_job",
             replace_existing=True,
-            misfire_grace_time=60  # Wait up to 60 seconds for missed jobs
+            misfire_grace_time=60
         )
 
         scheduler.add_job(
@@ -135,11 +149,15 @@ async def start_scheduler(bot: Bot):
             args=[None, None],
             id="backup_job",
             replace_existing=True,
-            misfire_grace_time=3600  # 1 hour grace for backup
+            misfire_grace_time=3600
         )
 
         scheduler.start()
         logger.info("⏰ Scheduler started successfully!")
+
+        # 🔥 Immediately send a quiz on startup (one-time) to verify functionality
+        logger.info("🔍 Sending initial quiz on startup...")
+        await send_quiz(bot)
 
     except Exception as e:
         logger.error(f"❌ Failed to start scheduler: {e}", exc_info=True)
