@@ -2,10 +2,11 @@ import logging
 import warnings
 import re
 
-# 🔥 SUPPRESS WARNINGS AT MODULE IMPORT LEVEL
+# ===== SUPPRESS ALL HARMLESS WARNINGS =====
 warnings.filterwarnings("ignore")
 logging.getLogger("pymongo").setLevel(logging.ERROR)
 logging.getLogger("motor").setLevel(logging.ERROR)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)   # 🔥 Suppress missed job warnings
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
