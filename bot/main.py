@@ -362,27 +362,39 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # ===== ADD QUESTION BUTTON =====
-    application.add_handler(
-        CallbackQueryHandler(add_question_start, pattern="^add_question$")
+    # ===== QUESTION SUBMISSION CONVERSATION HANDLER =====
+    question_conv = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(add_question_start, pattern="^add_question$")
+        ],
+        states={
+            SUBJECT: [
+                CallbackQueryHandler(subject_callback, pattern="^sub_")
+            ],
+            CLASS_: [
+                CallbackQueryHandler(class_callback, pattern="^class_")
+            ],
+            CHAPTER: [
+                CallbackQueryHandler(chapter_callback, pattern="^chapter_"),
+                CallbackQueryHandler(chapter_page, pattern="^chap_"),
+            ],
+            QUESTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_question)
+            ],
+            NEXT_ACTION: [
+                CallbackQueryHandler(next_action_callback, pattern="^(next_q|done_q)$")
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            MessageHandler(filters.COMMAND, cancel)  # if user sends any command during flow, cancel
+        ],
+        allow_reentry=True,
+        per_user=True,
+        per_chat=False,
     )
 
-    # ===== QUESTION SUBMISSION CALLBACKS (FIXED) =====
-    application.add_handler(
-        CallbackQueryHandler(subject_callback, pattern="^sub_")
-    )
-    application.add_handler(
-        CallbackQueryHandler(class_callback, pattern="^class_")
-    )
-    application.add_handler(
-        CallbackQueryHandler(chapter_callback, pattern="^chapter_")
-    )
-    application.add_handler(
-        CallbackQueryHandler(chapter_page, pattern="^chap_")
-    )
-    application.add_handler(
-        CallbackQueryHandler(next_action_callback, pattern="^(next_q|done_q)$")
-    )
+    application.add_handler(question_conv)
 
     # ===== CHAPTER QUIZ HANDLERS =====
     application.add_handler(chapter_quiz_conv)
