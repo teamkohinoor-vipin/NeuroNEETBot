@@ -289,11 +289,20 @@ async def handle_custom_time_input(update: Update, context: ContextTypes.DEFAULT
     )
 
 
+# ========== INITIALIZATION ==========
+async def initialize(app: Application):
+    """Initialize database and scheduler."""
+    await connect_db(app)
+    logger.info("✅ Database connected, starting scheduler...")
+    await start_scheduler(app.bot)
+
+
 # ========== MAIN ==========
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
-    application.post_init = connect_db
+    # Set post_init to run initialization after building
+    application.post_init = initialize
     application.post_shutdown = close_db
 
     # -------- COMMAND HANDLERS --------
@@ -423,11 +432,6 @@ def main():
     application.add_error_handler(error_handler)
 
     logger.info("🤖 Bot started")
-
-    # 🔥 FIX: Start scheduler directly using asyncio.create_task
-    # This ensures it runs in the background after the bot starts
-    loop = asyncio.get_event_loop()
-    asyncio.create_task(start_scheduler(application.bot))
 
     application.run_polling(drop_pending_updates=True)
 
