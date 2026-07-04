@@ -356,10 +356,10 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
-    # ===== QUESTION SUBMISSION CONVERSATION HANDLER =====
-    # This handles the multi-step question submission process
-    # Note: The conversation handler needs to be registered BEFORE the suffix handler
-    # so that it can intercept messages first
+    # 🔥 NEW: Add Question button callback handler
+    application.add_handler(
+        CallbackQueryHandler(add_question_start, pattern="^add_question$")
+    )
 
     # ===== CHAPTER QUIZ HANDLERS =====
     application.add_handler(chapter_quiz_conv)
@@ -367,7 +367,6 @@ def main():
     application.add_handler(CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel"))
 
     # ===== SUFFIX INPUT HANDLER =====
-    # Registered after conversation handlers so it doesn't interfere with question submission
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_suffix_input)
     )
