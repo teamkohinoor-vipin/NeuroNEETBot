@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import warnings
 import re
@@ -295,9 +296,10 @@ def main():
     application.post_init = connect_db
     application.post_shutdown = close_db
 
+    # 🔥 FIX: Properly start scheduler using asyncio.create_task
     if application.job_queue:
         application.job_queue.run_once(
-            lambda ctx: start_scheduler(ctx.bot),
+            lambda ctx: asyncio.create_task(start_scheduler(ctx.bot)),
             when=5
         )
 
@@ -387,7 +389,7 @@ def main():
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
-            MessageHandler(filters.COMMAND, cancel)  # if user sends any command during flow, cancel
+            MessageHandler(filters.COMMAND, cancel)
         ],
         allow_reentry=True,
         per_user=True,
