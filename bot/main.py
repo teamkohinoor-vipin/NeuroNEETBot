@@ -6,7 +6,7 @@ import re
 warnings.filterwarnings("ignore")
 logging.getLogger("pymongo").setLevel(logging.ERROR)
 logging.getLogger("motor").setLevel(logging.ERROR)
-logging.getLogger("apscheduler").setLevel(logging.WARNING)   # 🔥 Suppress missed job warnings
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -362,8 +362,26 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
+    # ===== ADD QUESTION BUTTON =====
     application.add_handler(
         CallbackQueryHandler(add_question_start, pattern="^add_question$")
+    )
+
+    # ===== QUESTION SUBMISSION CALLBACKS (FIXED) =====
+    application.add_handler(
+        CallbackQueryHandler(subject_callback, pattern="^sub_")
+    )
+    application.add_handler(
+        CallbackQueryHandler(class_callback, pattern="^class_")
+    )
+    application.add_handler(
+        CallbackQueryHandler(chapter_callback, pattern="^chapter_")
+    )
+    application.add_handler(
+        CallbackQueryHandler(chapter_page, pattern="^chap_")
+    )
+    application.add_handler(
+        CallbackQueryHandler(next_action_callback, pattern="^(next_q|done_q)$")
     )
 
     # ===== CHAPTER QUIZ HANDLERS =====
