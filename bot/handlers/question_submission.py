@@ -1,5 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
+from telegram.error import BadRequest
 from bot.database.models import create_pending_batch, add_question_to_batch, get_pending_batch
 from bot.utils.validators import validate_question
 from bot.config import ADMIN_ID, CHAPTERS, chapter_menu
@@ -11,6 +12,19 @@ BATCH_ID = "batch_id"
 TEMP_SUBJECT = "temp_subject"
 TEMP_CLASS = "temp_class"
 TEMP_CHAPTER = "temp_chapter"
+
+
+# ========== HELPER: Safe edit message (ignore "not modified" error) ==========
+async def safe_edit_message(query, text, reply_markup=None, parse_mode=None):
+    """Edit message safely, ignoring 'Message is not modified' error."""
+    try:
+        await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    except BadRequest as e:
+        if "Message is not modified" in str(e):
+            # Ignore this specific error
+            pass
+        else:
+            raise
 
 
 async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -43,7 +57,8 @@ async def add_question_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if update.callback_query:
         query = update.callback_query
         await query.answer()
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "📚 Please select the subject given below:",
             reply_markup=reply_markup
         )
@@ -69,7 +84,8 @@ async def subject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔘 Class 12", callback_data="class_12")]
     ]
 
-    await query.edit_message_text(
+    await safe_edit_message(
+        query,
         "🎉 Please select the class given below:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -88,7 +104,8 @@ async def class_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     subject = context.user_data[TEMP_SUBJECT]
 
     try:
-        await query.edit_message_text(
+        await safe_edit_message(
+            query,
             "🎯 Please Select Chapter Name:",
             reply_markup=chapter_menu(subject, class_, 0)
         )
@@ -112,7 +129,8 @@ async def chapter_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     class_ = int(data[2])
     page = int(data[3])
 
-    await query.edit_message_text(
+    await safe_edit_message(
+        query,
         "🎯 Please Select Chapter Name:",
         reply_markup=chapter_menu(subject, class_, page)
     )
@@ -142,7 +160,8 @@ async def chapter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data[BATCH_ID] = batch_id
 
-    await query.edit_message_text(
+    await safe_edit_message(
+        query,
         "Now send your question in this strict format:\n\n"
         "Q: Question text\n"
         "A) Option 1\n"
@@ -209,7 +228,7 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
 
     if query.data == "next_q":
-        await query.edit_message_text("Send the next question:")
+        await safe_edit_message(query, "Send the next question:")
         return QUESTION
 
     batch_id = context.user_data.get(BATCH_ID)
@@ -238,12 +257,13 @@ async def next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     )
 
-    await query.edit_message_text(
+    await safe_edit_message(
+        query,
         "📨 *Your question has been sent for admin review.*\n\nAfter approval it will be added to quiz system.",
         parse_mode="Markdown"
     )
 
-    # 🔥 CLEAR FLAG before clearing everything
+    # 🔥 CLEAR FLAG
     context.user_data["in_question_submission"] = False
     context.user_data.clear()
 
@@ -254,7 +274,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("Question submission cancelled.")
 
-    # 🔥 CLEAR FLAG before clearing everything
+    # 🔥 CLEAR FLAG
     context.user_data["in_question_submission"] = False
     context.user_data.clear()
 
