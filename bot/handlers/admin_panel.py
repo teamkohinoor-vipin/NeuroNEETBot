@@ -110,9 +110,11 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
 
-    # FIXED: added flag to wait for suffix input
     elif query.data == "admin_set_suffix":
+        # Clear any previous waiting state
         context.user_data["waiting_for_suffix"] = True
+        # Also store that we are in suffix mode in a separate key to avoid conflicts
+        context.user_data["suffix_mode"] = True
         await query.edit_message_text(
             "✏️ *Please type the suffix you want to add to every question.*\n\n"
             "Examples:\n"
