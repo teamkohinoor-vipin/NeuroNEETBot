@@ -21,11 +21,16 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_suffix = await get_config("question_suffix", "")
     suffix_display = current_suffix if current_suffix else "None"
 
+    # 🔥 NEW: Suffix for Groups toggle
+    suffix_for_groups = await get_config("suffix_for_groups", True)
+    groups_suffix_status = "✅ ON" if suffix_for_groups else "❌ OFF"
+
     keyboard = [
         [InlineKeyboardButton(f"Toggle Question Add ({question_status})", callback_data="admin_toggle_question")],
         [InlineKeyboardButton(f"Answer Mentions ({mention_status})", callback_data="admin_toggle_mentions")],
         [InlineKeyboardButton(f"⏱️ Score Msg Delete ({time_display})", callback_data="admin_set_time")],
         [InlineKeyboardButton(f"✏️ Question Suffix ({suffix_display})", callback_data="admin_set_suffix")],
+        [InlineKeyboardButton(f"📢 Suffix for Groups ({groups_suffix_status})", callback_data="admin_toggle_groups_suffix")],
         [InlineKeyboardButton("Close", callback_data="admin_close")]
     ]
 
@@ -44,6 +49,7 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("❌ Not authorized.")
         return
 
+    # -------- Toggle Question Add --------
     if query.data == "admin_toggle_question":
         current = await get_config("question_add_enabled", True)
         await set_config("question_add_enabled", not current)
@@ -55,6 +61,7 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             ]])
         )
 
+    # -------- Toggle Answer Mentions --------
     elif query.data == "admin_toggle_mentions":
         current = await get_config("answer_mentions", True)
         await set_config("answer_mentions", not current)
@@ -66,6 +73,7 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             ]])
         )
 
+    # -------- Set Score Delete Time --------
     elif query.data == "admin_set_time":
         keyboard = [
             [InlineKeyboardButton("5 seconds", callback_data="admin_time_5")],
@@ -84,6 +92,7 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+    # -------- Preset time selection --------
     elif query.data.startswith("admin_time_") and query.data != "admin_time_custom":
         seconds = int(query.data.split("_")[2])
         await set_config("score_message_lifetime", seconds)
@@ -95,6 +104,7 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             ]])
         )
 
+    # -------- Custom time --------
     elif query.data == "admin_time_custom":
         context.user_data["waiting_for_custom_time"] = True
         await query.edit_message_text(
@@ -110,10 +120,9 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
 
+    # -------- Set Question Suffix --------
     elif query.data == "admin_set_suffix":
-        # Clear any previous waiting state
         context.user_data["waiting_for_suffix"] = True
-        # Also store that we are in suffix mode in a separate key to avoid conflicts
         context.user_data["suffix_mode"] = True
         await query.edit_message_text(
             "✏️ *Please type the suffix you want to add to every question.*\n\n"
@@ -126,6 +135,19 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
 
+    # 🔥 NEW: Toggle Suffix for Groups
+    elif query.data == "admin_toggle_groups_suffix":
+        current = await get_config("suffix_for_groups", True)
+        await set_config("suffix_for_groups", not current)
+        new_status = "✅ ON" if not current else "❌ OFF"
+        await query.edit_message_text(
+            f"Suffix for Groups toggled to {new_status}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Back to Panel", callback_data="admin_panel_back")
+            ]])
+        )
+
+    # -------- Back to panel --------
     elif query.data == "admin_panel_back":
         question_add_enabled = await get_config("question_add_enabled", True)
         question_status = "✅ ON" if question_add_enabled else "❌ OFF"
@@ -139,11 +161,15 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         current_suffix = await get_config("question_suffix", "")
         suffix_display = current_suffix if current_suffix else "None"
 
+        suffix_for_groups = await get_config("suffix_for_groups", True)
+        groups_suffix_status = "✅ ON" if suffix_for_groups else "❌ OFF"
+
         keyboard = [
             [InlineKeyboardButton(f"Toggle Question Add ({question_status})", callback_data="admin_toggle_question")],
             [InlineKeyboardButton(f"Answer Mentions ({mention_status})", callback_data="admin_toggle_mentions")],
             [InlineKeyboardButton(f"⏱️ Score Msg Delete ({time_display})", callback_data="admin_set_time")],
             [InlineKeyboardButton(f"✏️ Question Suffix ({suffix_display})", callback_data="admin_set_suffix")],
+            [InlineKeyboardButton(f"📢 Suffix for Groups ({groups_suffix_status})", callback_data="admin_toggle_groups_suffix")],
             [InlineKeyboardButton("Close", callback_data="admin_close")]
         ]
 
@@ -153,5 +179,6 @@ async def admin_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+    # -------- Close --------
     elif query.data == "admin_close":
         await query.delete_message()
