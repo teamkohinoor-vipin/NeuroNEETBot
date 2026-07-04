@@ -21,6 +21,10 @@ def admin_review_keyboard(batch_id: str, q_index: int, total: int):
             InlineKeyboardButton("🗑 Delete Q", callback_data=f"admin_deleteq_{batch_id}_{q_index}")
         ],
         [
+            InlineKeyboardButton("✅ Accept All", callback_data=f"admin_acceptall_{batch_id}"),
+            InlineKeyboardButton("❌ Reject All", callback_data=f"admin_rejectall_{batch_id}")
+        ],
+        [
             InlineKeyboardButton("❌ Reject Batch", callback_data=f"admin_delete_{batch_id}")
         ],
         [
@@ -63,7 +67,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     questions = batch.get("questions", [])
 
     # ================= REJECT BATCH =================
-
     if action == "delete":
         try:
             await db.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
@@ -82,6 +85,60 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ Failed to reject batch.")
         return
 
+    # ================= ACCEPT ALL =================
+    if action == "acceptall":
+        try:
+            accepted_count = 0
+            for q in questions:
+                q_copy = q.copy()
+                q_copy["approved"] = True
+                if "_id" in q_copy:
+                    del q_copy["_id"]
+                await db.db.questions.insert_one(q_copy)
+                accepted_count += 1
+
+            await db.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+
+            await query.edit_message_text(
+                f"✅ All {accepted_count} questions accepted and added to database."
+            )
+
+            try:
+                await context.bot.send_message(
+                    chat_id=submitter_id,
+                    text=f"🎉 Congratulations! All your {accepted_count} questions have been accepted by Admin."
+                )
+            except:
+                pass
+
+        except Exception as e:
+            logger.error(f"Accept all error: {e}")
+            await query.edit_message_text("❌ Failed to accept all questions.")
+        return
+
+    # ================= REJECT ALL =================
+    if action == "rejectall":
+        try:
+            total_questions = len(questions)
+            await db.db.pending_batches.delete_one({"_id": ObjectId(batch_id)})
+
+            await query.edit_message_text(
+                f"❌ All {total_questions} questions rejected."
+            )
+
+            try:
+                await context.bot.send_message(
+                    chat_id=submitter_id,
+                    text=f"❌ All your {total_questions} questions were rejected by Admin."
+                )
+            except:
+                pass
+
+        except Exception as e:
+            logger.error(f"Reject all error: {e}")
+            await query.edit_message_text("❌ Failed to reject all questions.")
+        return
+
     if not questions:
         await query.edit_message_text("No questions left.")
         return
@@ -89,7 +146,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total = len(questions)
 
     # ================= NAVIGATION =================
-
     if action == "next":
         q_index = (q_index + 1) % total
 
@@ -97,7 +153,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         q_index = (q_index - 1) % total
 
     # ================= ACCEPT / DELETE SINGLE =================
-
     elif action in ["accept", "deleteq"]:
 
         question = questions[q_index]
@@ -111,6 +166,15 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     del question_copy["_id"]
 
                 await db.db.questions.insert_one(question_copy)
+
+                # Send notification to submitter
+                try:
+                    await context.bot.send_message(
+                        chat_id=submitter_id,
+                        text="✅ One of your questions has been accepted by Admin."
+                    )
+                except:
+                    pass
 
             except Exception as e:
                 logger.error(f"Accept error: {e}")
@@ -142,7 +206,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         await context.bot.send_message(
                             chat_id=submitter_id,
-                            text="🎉 Congratulations 👏\n\nYour questions have been accepted by Admin."
+                            text="🎉 Congratulations 👏\n\nAll your questions have been accepted by Admin."
                         )
                     except:
                         pass
