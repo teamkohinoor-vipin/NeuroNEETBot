@@ -7,36 +7,48 @@ from bot.config import ADMIN_ID
 from bson import ObjectId
 from datetime import datetime
 import logging
-import asyncio
 
 logger = logging.getLogger(__name__)
 
 
 # -------- DATA CONVERTER --------
 def convert_data(data):
+    """
+    Recursively convert MongoDB documents to JSON-serializable format.
+    Handles ObjectId, datetime, list, and dict.
+    """
     if isinstance(data, ObjectId):
         return str(data)
+
     if isinstance(data, datetime):
         return data.isoformat()
+
     if isinstance(data, list):
         return [convert_data(i) for i in data]
+
     if isinstance(data, dict):
         return {k: convert_data(v) for k, v in data.items()}
+
     return data
 
 
 # -------- FULL DATABASE BACKUP --------
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Create a full database backup and send it as a JSON file.
+    """
     message = update.effective_message
 
+    # Admin only
     if update.effective_user.id != ADMIN_ID:
         await message.reply_text("❌ Admin only command")
         return
 
     try:
-        # Send status message
+        # Send initial status
         status_msg = await message.reply_text("⏳ Creating backup... Please wait (this may take a moment).")
 
+        # Prepare data containers
         data = {}
         collections = [
             "questions",
@@ -48,16 +60,19 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         stats = {}
 
+        # Fetch each collection
         for col in collections:
             data[col] = []
             cursor = db.db[col].find({})
+
             async for doc in cursor:
                 doc = convert_data(doc)
                 data[col].append(doc)
+
             stats[col] = len(data[col])
             logger.info(f"✅ {col}: {stats[col]} records")
 
-        # Convert to JSON with default=str
+        # Convert to JSON with default=str for safety
         backup_json = json.dumps(data, indent=2, default=str)
         backup_bytes = backup_json.encode('utf-8')
 
@@ -65,6 +80,7 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file = io.BytesIO(backup_bytes)
         file.name = "neuroneetbot_backup.json"
 
+        # Build caption
         caption = (
             "📦 *Database Backup*\n\n"
             f"🧠 Questions : {stats['questions']}\n"
@@ -79,7 +95,7 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Delete status message
         await status_msg.delete()
 
-        # Send the file
+        # Send backup file
         await message.reply_document(
             document=file,
             caption=caption,
@@ -95,41 +111,61 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # -------- RESTORE DATABASE --------
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Restore database from a backup JSON file.
+    """
     message = update.effective_message
 
+    # Admin only
     if update.effective_user.id != ADMIN_ID:
         await message.reply_text("❌ Admin only command")
         return
 
+    # Check if document is present
     document = message.document
     if not document:
-        await message.reply_text("❌ Send backup JSON file.")
+        # 🔥 FIX: Neutral message – no warning emoji
+        await message.reply_text("📤 Please send a backup JSON file to restore the database.")
         return
 
+    # Validate file type
     if not document.file_name.endswith('.json'):
         await message.reply_text("❌ Please send a .json file.")
         return
 
     try:
+        # Send status
         status_msg = await message.reply_text("⏳ Restoring database... Please wait.")
 
+        # Download and parse file
         file = await document.get_file()
         data_bytes = await file.download_as_bytearray()
         data = json.loads(data_bytes.decode('utf-8'))
 
         total = 0
-        collections = ["questions", "users", "groups", "answers", "poll_logs", "pending_batches"]
+        collections = [
+            "questions",
+            "users",
+            "groups",
+            "answers",
+            "poll_logs",
+            "pending_batches"
+        ]
 
+        # Insert data into each collection
         for collection in collections:
             if collection in data:
                 for doc in data[collection]:
+                    # Remove _id to let MongoDB generate new ones
                     doc.pop("_id", None)
                     await db.db[collection].insert_one(doc)
                     total += 1
                 logger.info(f"✅ Restored {len(data[collection])} records to {collection}")
 
+        # Delete status message
         await status_msg.delete()
 
+        # Send completion message
         await message.reply_text(
             f"✅ *Restore Complete*\n\n"
             f"📊 {total} records inserted.\n"
