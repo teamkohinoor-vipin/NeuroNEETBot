@@ -216,31 +216,35 @@ def parse_time_string(text: str) -> int:
     return None
 
 
+# ========== SUFFIX INPUT HANDLER ==========
 async def handle_suffix_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle custom suffix input from admin."""
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
         return
-    
-    # Check both flags to be safe
+
+    # 🔥 CHECK: If user is in question submission, ignore suffix
+    if context.user_data.get("in_question_submission"):
+        return
+
     if not context.user_data.get("waiting_for_suffix") and not context.user_data.get("suffix_mode"):
         return
-    
+
     text = update.message.text.strip()
-    
+
     if text.lower() == "/cancel":
         context.user_data["waiting_for_suffix"] = False
         context.user_data["suffix_mode"] = False
         await update.message.reply_text("❌ Suffix setting cancelled.")
         return
-    
+
     if text.lower() == "none":
         await set_config("question_suffix", "")
         context.user_data["waiting_for_suffix"] = False
         context.user_data["suffix_mode"] = False
         await update.message.reply_text("✅ Question suffix removed.")
         return
-    
+
     await set_config("question_suffix", text)
     context.user_data["waiting_for_suffix"] = False
     context.user_data["suffix_mode"] = False
@@ -250,6 +254,7 @@ async def handle_suffix_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 
+# ========== CUSTOM TIME INPUT HANDLER ==========
 async def handle_custom_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
@@ -290,6 +295,7 @@ def main():
             when=5
         )
 
+    # -------- COMMAND HANDLERS --------
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
 
@@ -318,6 +324,7 @@ def main():
         MessageHandler(filters.Document.ALL, restore)
     )
 
+    # -------- CALLBACK QUERY HANDLERS --------
     application.add_handler(
         CallbackQueryHandler(help_callback, pattern="^help$")
     )
@@ -349,22 +356,28 @@ def main():
         CallbackQueryHandler(back_to_main, pattern="^back_to_main$")
     )
 
+    # ===== QUESTION SUBMISSION CONVERSATION HANDLER =====
+    # This handles the multi-step question submission process
+    # Note: The conversation handler needs to be registered BEFORE the suffix handler
+    # so that it can intercept messages first
+
     # ===== CHAPTER QUIZ HANDLERS =====
     application.add_handler(chapter_quiz_conv)
     application.add_handler(CommandHandler("stopquiz", stop_quiz_command))
     application.add_handler(CallbackQueryHandler(quiz_cancel, pattern="^quiz_cancel"))
 
-    # ===== SUFFIX INPUT HANDLER (REGISTER FIRST) =====
+    # ===== SUFFIX INPUT HANDLER =====
+    # Registered after conversation handlers so it doesn't interfere with question submission
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_suffix_input)
     )
-    
+
     # ===== CUSTOM TIME INPUT HANDLER =====
     application.add_handler(
         MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, handle_custom_time_input)
     )
 
-    # ===== Bot added/removed handlers =====
+    # ===== BOT ADDED/REMOVED HANDLERS =====
     application.add_handler(
         ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
     )
