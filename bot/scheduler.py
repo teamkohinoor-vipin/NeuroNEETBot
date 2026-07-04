@@ -44,10 +44,12 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
             options = truncate_options(options)
             logger.debug(f"Truncated options for group {chat_id}")
 
-        # Read suffix
+        # 🔥 SUFFIX FOR GROUPS - check config
         suffix = await get_config("question_suffix", "")
+        suffix_for_groups = await get_config("suffix_for_groups", True)
+        
         question_text = question["question"]
-        if suffix:
+        if suffix and suffix_for_groups:
             question_text = f"{question_text} {suffix}"
 
         # Delete previous poll
@@ -142,8 +144,6 @@ async def start_scheduler(bot: Bot):
 
         scheduler.start()
         logger.info("⏰ Scheduler started successfully!")
-
-        # 🚫 Removed test quiz to avoid startup errors – first quiz will be sent after interval
 
     except Exception as e:
         logger.error(f"❌ Failed to start scheduler: {e}", exc_info=True)
