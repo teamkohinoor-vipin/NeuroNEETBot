@@ -9,54 +9,43 @@ import math
 
 logger = logging.getLogger(__name__)
 
-GROUPS_PER_PAGE = 10
+GROUPS_PER_PAGE = 5
 
 
 async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    logger.info(f"Links command received from user {user_id}")
-
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command")
+    if update.effective_user.id != ADMIN_ID:
         return
-
     msg = await update.message.reply_text("⏳ Loading group links...")
     asyncio.create_task(load_and_display_links(msg, context))
 
 
 async def load_and_display_links(message, context):
     try:
-        # Use a timeout for the entire operation (30 seconds)
-        await asyncio.wait_for(_load_and_display(message, context), timeout=30)
-    except asyncio.TimeoutError:
-        await message.edit_text("❌ Timeout: Too many groups to fetch links. Please try again later.")
+        group_ids = await get_all_groups()
+        if not group_ids:
+            await message.edit_text("No groups found.")
+            return
+
+        # Fetch missing data for groups that don't have title/link yet
+        await fetch_group_details(group_ids, context.bot)
+
+        # Get only active groups (bot still present)
+        valid_ids = await get_active_group_ids(context.bot, group_ids)
+        if not valid_ids:
+            await message.edit_text("No active groups found.")
+            return
+
+        # Store active group IDs in context for pagination
+        context.user_data["group_ids"] = valid_ids
+        logger.info(f"Loaded {len(valid_ids)} active groups.")
+        await display_page(message, context, page=0)
     except Exception as e:
-        logger.error(f"Error loading links: {e}", exc_info=True)
-        await message.edit_text(f"❌ Failed to load group links: {str(e)[:100]}")
-
-
-async def _load_and_display(message, context):
-    group_ids = await get_all_groups()
-    if not group_ids:
-        await message.edit_text("No groups found.")
-        return
-
-    # Fetch missing data (with timeout)
-    await fetch_group_details(group_ids, context.bot)
-
-    # Get active groups
-    valid_ids = await get_active_group_ids(context.bot, group_ids)
-    if not valid_ids:
-        await message.edit_text("No active groups found.")
-        return
-
-    context.user_data["group_ids"] = valid_ids
-    logger.info(f"Loaded {len(valid_ids)} active groups.")
-    await display_page(message, context, page=0)
+        logger.error(f"Error loading links: {e}")
+        await message.edit_text("❌ Failed to load group links.")
 
 
 async def fetch_group_details(group_ids, bot):
-    semaphore = asyncio.Semaphore(10)
+    semaphore = asyncio.Semaphore(5)
 
     async def fetch_one(chat_id):
         async with semaphore:
@@ -65,20 +54,19 @@ async def fetch_group_details(group_ids, bot):
                 return
 
             try:
-                chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=5)
+                chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=3)
                 title = chat.title
                 try:
-                    link = await asyncio.wait_for(bot.export_chat_invite_link(chat_id), timeout=5)
-                except Exception as e:
-                    logger.warning(f"Could not get invite link for {chat_id}: {e}")
-                    link = "❌ Link not available (bot may not be admin)"
+                    link = await asyncio.wait_for(bot.export_chat_invite_link(chat_id), timeout=3)
+                except:
+                    link = "❌ Link not available"
                 await db.db.groups.update_one(
                     {"chat_id": chat_id},
                     {"$set": {"title": title, "invite_link": link}},
                     upsert=True
                 )
             except Exception as e:
-                logger.info(f"Removing group {chat_id} (bot not present or no access): {e}")
+                logger.info(f"Removing group {chat_id} (bot not present)")
                 await db.db.groups.delete_one({"chat_id": chat_id})
 
     await asyncio.gather(*[fetch_one(cid) for cid in group_ids])
@@ -88,10 +76,9 @@ async def get_active_group_ids(bot, all_ids):
     valid = []
     for cid in all_ids:
         try:
-            await asyncio.wait_for(bot.get_chat(cid), timeout=3)
+            await asyncio.wait_for(bot.get_chat(cid), timeout=2)
             valid.append(cid)
-        except Exception as e:
-            logger.debug(f"Group {cid} not accessible: {e}")
+        except:
             await db.db.groups.delete_one({"chat_id": cid})
     return valid
 
@@ -107,6 +94,7 @@ async def display_page(message_or_query, context, page):
         await edit_text(message_or_query, "No active groups found.")
         return
 
+    # Compute pagination
     total_pages = math.ceil(total / GROUPS_PER_PAGE)
     start = page * GROUPS_PER_PAGE
     end = min(start + GROUPS_PER_PAGE, total)
@@ -124,14 +112,13 @@ async def display_page(message_or_query, context, page):
             link = "❌ Link not available"
         text += f"{idx}. *{title}*\n{link}\n\n"
 
-    # Pagination buttons
+    # Build inline keyboard with wrap‑around pagination
     keyboard = []
     if total_pages > 1:
         prev_page = (page - 1) % total_pages
         next_page = (page + 1) % total_pages
         nav = [
             InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{prev_page}"),
-            InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="noop"),
             InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{next_page}")
         ]
         keyboard.append(nav)
@@ -167,6 +154,7 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
 
+    # Extract target page from callback data
     try:
         page = int(query.data.split("_")[-1])
     except:
@@ -175,6 +163,7 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     group_ids = context.user_data.get("group_ids")
     if not group_ids:
+        # If context lost, reload from DB
         group_ids = await get_active_group_ids(context.bot, await get_all_groups())
         context.user_data["group_ids"] = group_ids
 
@@ -184,6 +173,7 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     total_pages = math.ceil(total / GROUPS_PER_PAGE)
+    # Ensure page is within valid range (should be, but just in case)
     page = page % total_pages
 
     await display_page(query, context, page)
