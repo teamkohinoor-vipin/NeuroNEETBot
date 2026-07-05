@@ -1,9 +1,13 @@
 import json
 import io
+import asyncio
+import tempfile
+import os
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database.db import db
-from bot.config import ADMIN_ID
+from bot.config import MONGO_URI, ADMIN_ID
+from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from datetime import datetime
 import logging
@@ -13,74 +17,100 @@ logger = logging.getLogger(__name__)
 
 # -------- DATA CONVERTER --------
 def convert_data(data):
-    """
-    Recursively convert MongoDB documents to JSON-serializable format.
-    Handles ObjectId, datetime, list, and dict.
-    """
     if isinstance(data, ObjectId):
         return str(data)
-
     if isinstance(data, datetime):
         return data.isoformat()
-
     if isinstance(data, list):
         return [convert_data(i) for i in data]
-
     if isinstance(data, dict):
         return {k: convert_data(v) for k, v in data.items()}
-
     return data
 
 
-# -------- FULL DATABASE BACKUP --------
+# -------- FULL DATABASE BACKUP (Non‑Blocking) --------
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Create a full database backup and send it as a JSON file.
-    """
     message = update.effective_message
+    user_id = update.effective_user.id
 
-    # Admin only
-    if update.effective_user.id != ADMIN_ID:
+    if user_id != ADMIN_ID:
         await message.reply_text("❌ Admin only command")
         return
 
+    # Send immediate response
+    status_msg = await message.reply_text("⏳ Creating backup... This may take a few minutes. I'll send it when ready.")
+
+    # Run the heavy work in background
+    asyncio.create_task(do_backup(message, status_msg))
+
+
+async def do_backup(message, status_msg):
     try:
-        # Send initial status
-        status_msg = await message.reply_text("⏳ Creating backup... Please wait (this may take a moment).")
+        # Use a separate client with longer timeout
+        backup_client = AsyncIOMotorClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=60000,
+            connectTimeoutMS=60000,
+            socketTimeoutMS=60000,
+            maxPoolSize=10,
+            minPoolSize=1
+        )
+        backup_db = backup_client["neetquiz"]
 
-        # Prepare data containers
-        data = {}
-        collections = [
-            "questions",
-            "users",
-            "groups",
-            "answers",
-            "poll_logs",
-            "pending_batches"
-        ]
-        stats = {}
+        # Temporary file
+        with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp_file:
+            tmp_path = tmp_file.name
+            tmp_file.write('{\n')
+            first_collection = True
 
-        # Fetch each collection
-        for col in collections:
-            data[col] = []
-            cursor = db.db[col].find({})
+            collections = [
+                "questions",
+                "users",
+                "groups",
+                "answers",
+                "poll_logs",
+                "pending_batches"
+            ]
+            stats = {}
 
-            async for doc in cursor:
-                doc = convert_data(doc)
-                data[col].append(doc)
+            for col_name in collections:
+                await status_msg.edit_text(f"⏳ Backing up {col_name}...")
+                logger.info(f"Backing up {col_name}")
 
-            stats[col] = len(data[col])
-            logger.info(f"✅ {col}: {stats[col]} records")
+                count = await backup_db[col_name].count_documents({})
+                stats[col_name] = count
 
-        # Convert to JSON with default=str for safety
-        backup_json = json.dumps(data, indent=2, default=str)
-        backup_bytes = backup_json.encode('utf-8')
+                if not first_collection:
+                    tmp_file.write(',\n')
+                first_collection = False
 
-        # Create file in memory
-        file = io.BytesIO(backup_bytes)
-        file.name = "neuroneetbot_backup.json"
+                tmp_file.write(f'  "{col_name}": [\n')
+                first_doc = True
 
-        # Build caption
+                cursor = backup_db[col_name].find({}).batch_size(1000)
+                async for doc in cursor:
+                    doc = convert_data(doc)
+                    if not first_doc:
+                        tmp_file.write(',\n')
+                    first_doc = False
+                    json.dump(doc, tmp_file, default=str)
+                    if cursor._cursor_id % 100 == 0:
+                        tmp_file.flush()
+
+                tmp_file.write('\n  ]')
+                logger.info(f"Finished {col_name} ({count} records)")
+
+            tmp_file.write('\n}\n')
+            tmp_file.flush()
+
+        backup_client.close()
+
+        # Read file and send
+        with open(tmp_path, 'rb') as f:
+            file_data = f.read()
+        file_bytes = io.BytesIO(file_data)
+        file_bytes.name = "neuroneetbot_backup.json"
+
         caption = (
             "📦 *Database Backup*\n\n"
             f"🧠 Questions : {stats['questions']}\n"
@@ -92,52 +122,38 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📅 Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
-        # Delete status message
         await status_msg.delete()
+        await message.reply_document(document=file_bytes, caption=caption, parse_mode="Markdown")
+        os.unlink(tmp_path)
 
-        # Send backup file
-        await message.reply_document(
-            document=file,
-            caption=caption,
-            parse_mode="Markdown"
-        )
-
-        logger.info(f"✅ Backup completed: {sum(stats.values())} total records")
+        logger.info("✅ Backup completed")
 
     except Exception as e:
         logger.error(f"❌ Backup error: {e}", exc_info=True)
-        await message.reply_text(f"❌ Backup error:\n{str(e)}")
+        await status_msg.edit_text(f"❌ Backup error:\n{str(e)}")
 
 
-# -------- RESTORE DATABASE --------
+# -------- RESTORE DATABASE (unchanged) --------
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Restore database from a backup JSON file.
-    """
     message = update.effective_message
+    user_id = update.effective_user.id
 
-    # Admin only
-    if update.effective_user.id != ADMIN_ID:
+    if user_id != ADMIN_ID:
         await message.reply_text("❌ Admin only command")
         return
 
-    # Check if document is present
     document = message.document
     if not document:
-        # 🔥 FIX: Neutral message – no warning emoji
         await message.reply_text("📤 Please send a backup JSON file to restore the database.")
         return
 
-    # Validate file type
     if not document.file_name.endswith('.json'):
         await message.reply_text("❌ Please send a .json file.")
         return
 
     try:
-        # Send status
         status_msg = await message.reply_text("⏳ Restoring database... Please wait.")
 
-        # Download and parse file
         file = await document.get_file()
         data_bytes = await file.download_as_bytearray()
         data = json.loads(data_bytes.decode('utf-8'))
@@ -152,20 +168,15 @@ async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "pending_batches"
         ]
 
-        # Insert data into each collection
         for collection in collections:
             if collection in data:
                 for doc in data[collection]:
-                    # Remove _id to let MongoDB generate new ones
                     doc.pop("_id", None)
                     await db.db[collection].insert_one(doc)
                     total += 1
                 logger.info(f"✅ Restored {len(data[collection])} records to {collection}")
 
-        # Delete status message
         await status_msg.delete()
-
-        # Send completion message
         await message.reply_text(
             f"✅ *Restore Complete*\n\n"
             f"📊 {total} records inserted.\n"
