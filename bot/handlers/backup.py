@@ -11,8 +11,6 @@ from bson import ObjectId
 from datetime import datetime
 import logging
 import pymongo
-import concurrent.futures
-import multiprocessing
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +25,16 @@ def convert_data(data):
         return {k: convert_data(v) for k, v in data.items()}
     return data
 
-# ===== THIS RUNS IN A SEPARATE PROCESS =====
-def run_backup_process(uri):
-    """Pure sync function that does the backup and returns file path and stats."""
+def do_backup_sync(status_msg, message, loop):
+    """Synchronous backup – runs in a separate thread."""
     try:
-        client = pymongo.MongoClient(uri, serverSelectionTimeoutMS=60000, connectTimeoutMS=60000, socketTimeoutMS=60000)
+        logger.info("🔄 Backup thread started.")
+        client = pymongo.MongoClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=60000,
+            connectTimeoutMS=60000,
+            socketTimeoutMS=60000
+        )
         backup_db = client["neetquiz"]
         with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp_file:
             tmp_path = tmp_file.name
@@ -40,8 +43,11 @@ def run_backup_process(uri):
             collections = ["questions","users","groups","answers","poll_logs","pending_batches"]
             stats = {}
             for col_name in collections:
-                # No async updates here – we'll update status from main process
-                logger.info(f"Process backing up {col_name}")
+                asyncio.run_coroutine_threadsafe(
+                    status_msg.edit_text(f"⏳ Backing up {col_name}..."),
+                    loop
+                )
+                logger.info(f"📊 Backing up {col_name}")
                 count = backup_db[col_name].count_documents({})
                 stats[col_name] = count
                 if not first_collection:
@@ -61,35 +67,11 @@ def run_backup_process(uri):
                     if doc_count % 100 == 0:
                         tmp_file.flush()
                 tmp_file.write('\n  ]')
-                logger.info(f"Process finished {col_name} ({count} records)")
+                logger.info(f"✅ Finished {col_name} ({count} records)")
             tmp_file.write('\n}\n')
             tmp_file.flush()
         client.close()
-        # Return path and stats
-        return tmp_path, stats
-    except Exception as e:
-        logger.error(f"Process backup error: {e}", exc_info=True)
-        raise
-
-# ===== ASYNC COMMAND HANDLER =====
-async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command")
-        return
-
-    status_msg = await update.message.reply_text(
-        "⏳ Creating backup... This may take a few minutes. I'll send it when ready.\n"
-        "You can continue using the bot while I work."
-    )
-
-    loop = asyncio.get_running_loop()
-    # Use ProcessPoolExecutor to avoid GIL blocking
-    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as pool:
-        # Run backup in separate process
-        tmp_path, stats = await loop.run_in_executor(pool, run_backup_process, MONGO_URI)
-
-    # Now read file and send
-    try:
+        logger.info("📦 Backup file created, preparing to send...")
         with open(tmp_path, 'rb') as f:
             file_data = f.read()
         file_bytes = io.BytesIO(file_data)
@@ -104,15 +86,38 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏳ Pending Batches : {stats['pending_batches']}\n\n"
             f"📅 Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
-        await status_msg.delete()
-        await update.message.reply_document(document=file_bytes, caption=caption, parse_mode="Markdown")
+        asyncio.run_coroutine_threadsafe(status_msg.delete(), loop)
+        asyncio.run_coroutine_threadsafe(
+            message.reply_document(document=file_bytes, caption=caption, parse_mode="Markdown"),
+            loop
+        )
         os.unlink(tmp_path)
-        logger.info("✅ Backup completed and sent")
+        logger.info("✅ Backup completed and sent.")
+        return True
     except Exception as e:
-        logger.error(f"❌ Error sending backup: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ Error sending backup: {str(e)}")
+        logger.error(f"❌ Backup thread error: {e}", exc_info=True)
+        asyncio.run_coroutine_threadsafe(
+            status_msg.edit_text(f"❌ Backup error:\n{str(e)}"),
+            loop
+        )
+        return False
 
-# ===== RESTORE (unchanged) =====
+async def run_backup_in_background(status_msg, message, loop):
+    await loop.run_in_executor(None, do_backup_sync, status_msg, message, loop)
+
+async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Admin only command")
+        return
+
+    status_msg = await update.message.reply_text(
+        "⏳ Creating backup... This may take a few minutes. I'll send it when ready.\n"
+        "You can continue using the bot while I work."
+    )
+    logger.info("🚀 /backup command received, starting background task.")
+    loop = asyncio.get_running_loop()
+    asyncio.create_task(run_backup_in_background(status_msg, update.effective_message, loop))
+
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     if update.effective_user.id != ADMIN_ID:
