@@ -77,20 +77,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ===== TEST COMMAND =====
-async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"🔔 Ping command received from {update.effective_user.id}")
-    await update.message.reply_text("Pong! Bot is alive.")
-
-
-# ===== LOG ALL MESSAGES FOR DEBUGGING =====
-async def log_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message:
-        logger.info(f"📩 Message: {update.message.text} from {update.effective_user.id}")
-    elif update.callback_query:
-        logger.info(f"📩 Callback: {update.callback_query.data}")
-
-
 async def unmatched_callback(update: Update, context):
     logger.warning(f"Unknown callback: {update.callback_query.data}")
     await update.callback_query.answer(
@@ -240,29 +226,39 @@ def parse_time_string(text: str) -> int:
 
 # ========== SUFFIX INPUT HANDLER ==========
 async def handle_suffix_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle custom suffix input from admin."""
     user_id = update.effective_user.id
     if user_id != ADMIN_ID:
         return
+
     if context.user_data.get("in_question_submission"):
         return
+
     if not context.user_data.get("waiting_for_suffix") and not context.user_data.get("suffix_mode"):
         return
+
     text = update.message.text.strip()
+
     if text.lower() == "/cancel":
         context.user_data["waiting_for_suffix"] = False
         context.user_data["suffix_mode"] = False
         await update.message.reply_text("❌ Suffix setting cancelled.")
         return
+
     if text.lower() == "none":
         await set_config("question_suffix", "")
         context.user_data["waiting_for_suffix"] = False
         context.user_data["suffix_mode"] = False
         await update.message.reply_text("✅ Question suffix removed.")
         return
+
     await set_config("question_suffix", text)
     context.user_data["waiting_for_suffix"] = False
     context.user_data["suffix_mode"] = False
-    await update.message.reply_text(f"✅ Question suffix set to: `{text}`", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"✅ Question suffix set to: `{text}`",
+        parse_mode="Markdown"
+    )
 
 
 # ========== CUSTOM TIME INPUT HANDLER ==========
@@ -280,27 +276,25 @@ async def handle_custom_time_input(update: Update, context: ContextTypes.DEFAULT
     seconds = parse_time_string(text)
     if seconds is None or seconds <= 0:
         await update.message.reply_text(
-            "❌ Invalid time format. Please type like: `10 sec`, `1 min`, `5 minutes`, `30` (seconds)\n"
+            "❌ Invalid time format. Please type something like:\n"
+            "`10 sec`, `1 min`, `5 minutes`, `30` (seconds)\n"
             "or `/cancel` to cancel."
         )
         return
     await set_config("score_message_lifetime", seconds)
     context.user_data["waiting_for_custom_time"] = False
-    await update.message.reply_text(f"✅ Score message delete time set to **{seconds} seconds**.", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"✅ Score message delete time set to **{seconds} seconds**.",
+        parse_mode="Markdown"
+    )
 
 
-# ========== INITIALIZATION (with webhook deletion) ==========
+# ========== INITIALIZATION ==========
 async def initialize(app: Application):
-    try:
-        # 🔥 Force delete webhook to ensure polling works
-        await app.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook deleted.")
-        
-        await connect_db(app)
-        logger.info("✅ Database connected, starting scheduler...")
-        await start_scheduler(app.bot)
-    except Exception as e:
-        logger.error(f"❌ Initialization error: {e}", exc_info=True)
+    """Initialize database and scheduler."""
+    await connect_db(app)
+    logger.info("✅ Database connected, starting scheduler...")
+    await start_scheduler(app.bot)
 
 
 # ========== MAIN ==========
@@ -311,11 +305,7 @@ def main():
     application.post_init = initialize
     application.post_shutdown = close_db
 
-    # -------- LOG ALL MESSAGES (debugging) --------
-    application.add_handler(MessageHandler(filters.ALL, log_all_messages), group=0)
-
     # -------- COMMAND HANDLERS --------
-    application.add_handler(CommandHandler("ping", ping))  # <-- TEST COMMAND
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
 
