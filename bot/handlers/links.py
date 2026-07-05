@@ -9,12 +9,17 @@ import math
 
 logger = logging.getLogger(__name__)
 
-GROUPS_PER_PAGE = 10  # 🔥 Increased from 5 to 10 to show more groups per page
+GROUPS_PER_PAGE = 10
 
 
 async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    user_id = update.effective_user.id
+    logger.info(f"Links command received from user {user_id}")
+
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("❌ Admin only command")
         return
+
     msg = await update.message.reply_text("⏳ Loading group links...")
     asyncio.create_task(load_and_display_links(msg, context))
 
@@ -40,12 +45,12 @@ async def load_and_display_links(message, context):
         logger.info(f"Loaded {len(valid_ids)} active groups.")
         await display_page(message, context, page=0)
     except Exception as e:
-        logger.error(f"Error loading links: {e}")
+        logger.error(f"Error loading links: {e}", exc_info=True)
         await message.edit_text("❌ Failed to load group links.")
 
 
 async def fetch_group_details(group_ids, bot):
-    semaphore = asyncio.Semaphore(10)  # 🔥 Increased from 5 to 10 for faster fetching
+    semaphore = asyncio.Semaphore(10)
 
     async def fetch_one(chat_id):
         async with semaphore:
@@ -54,11 +59,12 @@ async def fetch_group_details(group_ids, bot):
                 return
 
             try:
-                chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=5)  # 🔥 Increased timeout
+                chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=5)
                 title = chat.title
                 try:
                     link = await asyncio.wait_for(bot.export_chat_invite_link(chat_id), timeout=5)
-                except:
+                except Exception as e:
+                    logger.warning(f"Could not get invite link for {chat_id}: {e}")
                     link = "❌ Link not available (bot may not be admin)"
                 await db.db.groups.update_one(
                     {"chat_id": chat_id},
@@ -66,7 +72,7 @@ async def fetch_group_details(group_ids, bot):
                     upsert=True
                 )
             except Exception as e:
-                logger.info(f"Removing group {chat_id} (bot not present or no access)")
+                logger.info(f"Removing group {chat_id} (bot not present or no access): {e}")
                 await db.db.groups.delete_one({"chat_id": chat_id})
 
     await asyncio.gather(*[fetch_one(cid) for cid in group_ids])
@@ -76,9 +82,10 @@ async def get_active_group_ids(bot, all_ids):
     valid = []
     for cid in all_ids:
         try:
-            await asyncio.wait_for(bot.get_chat(cid), timeout=3)  # 🔥 Increased timeout
+            await asyncio.wait_for(bot.get_chat(cid), timeout=3)
             valid.append(cid)
-        except:
+        except Exception as e:
+            logger.debug(f"Group {cid} not accessible: {e}")
             await db.db.groups.delete_one({"chat_id": cid})
     return valid
 
@@ -118,7 +125,7 @@ async def display_page(message_or_query, context, page):
         next_page = (page + 1) % total_pages
         nav = [
             InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{prev_page}"),
-            InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="noop"),  # 🔥 Show current page
+            InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="noop"),
             InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{next_page}")
         ]
         keyboard.append(nav)
