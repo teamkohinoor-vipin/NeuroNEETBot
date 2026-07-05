@@ -27,11 +27,15 @@ def convert_data(data):
     return data
 
 
-# -------- STREAMING BACKUP (with increased timeouts) --------
+# -------- STREAMING BACKUP --------
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Create a full database backup and send as JSON file."""
     message = update.effective_message
+    user_id = update.effective_user.id
 
-    if update.effective_user.id != ADMIN_ID:
+    logger.info(f"Backup command received from user {user_id}")
+
+    if user_id != ADMIN_ID:
         await message.reply_text("❌ Admin only command")
         return
 
@@ -58,6 +62,7 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for col_name in collections:
                 # Update status every collection
                 await status_msg.edit_text(f"⏳ Backing up {col_name}...")
+                logger.info(f"Backing up collection: {col_name}")
 
                 # Get count for stats
                 count = await db.db[col_name].count_documents({})
@@ -83,6 +88,7 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         tmp_file.flush()
 
                 tmp_file.write('\n  ]')
+                logger.info(f"Finished backing up {col_name} ({count} records)")
 
             tmp_file.write('\n}\n')
             tmp_file.flush()
@@ -126,8 +132,9 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------- RESTORE (unchanged) --------
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
+    user_id = update.effective_user.id
 
-    if update.effective_user.id != ADMIN_ID:
+    if user_id != ADMIN_ID:
         await message.reply_text("❌ Admin only command")
         return
 
