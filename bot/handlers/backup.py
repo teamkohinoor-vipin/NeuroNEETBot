@@ -7,10 +7,10 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot.database.db import db
 from bot.config import MONGO_URI, ADMIN_ID
-from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from datetime import datetime
 import logging
+import pymongo
 
 logger = logging.getLogger(__name__)
 
@@ -28,36 +28,33 @@ def convert_data(data):
     return data
 
 
-# -------- FULL DATABASE BACKUP (Non‑Blocking) --------
-async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
-    user_id = update.effective_user.id
-
-    if user_id != ADMIN_ID:
-        await message.reply_text("❌ Admin only command")
-        return
-
-    # Send immediate response
-    status_msg = await message.reply_text("⏳ Creating backup... This may take a few minutes. I'll send it when ready.")
-
-    # Run the heavy work in background
-    asyncio.create_task(do_backup(message, status_msg))
-
-
-async def do_backup(message, status_msg):
+# ===== HEAVY WORK IN SEPARATE THREAD =====
+async def run_backup_in_thread(status_msg, message):
+    """Run the backup in a separate thread to avoid blocking the event loop."""
     try:
-        # Use a separate client with longer timeout
-        backup_client = AsyncIOMotorClient(
+        result = await asyncio.to_thread(do_backup_sync, status_msg, message)
+        return result
+    except Exception as e:
+        logger.error(f"Backup thread error: {e}", exc_info=True)
+        try:
+            await status_msg.edit_text(f"❌ Backup error:\n{str(e)}")
+        except:
+            pass
+        return None
+
+
+def do_backup_sync(status_msg, message):
+    """Synchronous backup function – runs in a separate thread."""
+    try:
+        # Use sync pymongo client (not Motor) for thread safety
+        client = pymongo.MongoClient(
             MONGO_URI,
             serverSelectionTimeoutMS=60000,
             connectTimeoutMS=60000,
-            socketTimeoutMS=60000,
-            maxPoolSize=10,
-            minPoolSize=1
+            socketTimeoutMS=60000
         )
-        backup_db = backup_client["neetquiz"]
+        backup_db = client["neetquiz"]
 
-        # Temporary file
         with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp_file:
             tmp_path = tmp_file.name
             tmp_file.write('{\n')
@@ -73,11 +70,17 @@ async def do_backup(message, status_msg):
             ]
             stats = {}
 
+            loop = asyncio.get_event_loop()
+
             for col_name in collections:
-                await status_msg.edit_text(f"⏳ Backing up {col_name}...")
+                # Update status (async-safe)
+                asyncio.run_coroutine_threadsafe(
+                    status_msg.edit_text(f"⏳ Backing up {col_name}..."),
+                    loop
+                )
                 logger.info(f"Backing up {col_name}")
 
-                count = await backup_db[col_name].count_documents({})
+                count = backup_db[col_name].count_documents({})
                 stats[col_name] = count
 
                 if not first_collection:
@@ -88,13 +91,16 @@ async def do_backup(message, status_msg):
                 first_doc = True
 
                 cursor = backup_db[col_name].find({}).batch_size(1000)
-                async for doc in cursor:
+                doc_count = 0
+                for doc in cursor:
                     doc = convert_data(doc)
                     if not first_doc:
                         tmp_file.write(',\n')
                     first_doc = False
                     json.dump(doc, tmp_file, default=str)
-                    if cursor._cursor_id % 100 == 0:
+                    doc_count += 1
+                    # 🔥 FIX: Flush every 100 documents manually
+                    if doc_count % 100 == 0:
                         tmp_file.flush()
 
                 tmp_file.write('\n  ]')
@@ -103,7 +109,7 @@ async def do_backup(message, status_msg):
             tmp_file.write('\n}\n')
             tmp_file.flush()
 
-        backup_client.close()
+        client.close()
 
         # Read file and send
         with open(tmp_path, 'rb') as f:
@@ -122,18 +128,48 @@ async def do_backup(message, status_msg):
             f"📅 Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
-        await status_msg.delete()
-        await message.reply_document(document=file_bytes, caption=caption, parse_mode="Markdown")
+        # Send from thread
+        asyncio.run_coroutine_threadsafe(
+            status_msg.delete(),
+            loop
+        )
+        asyncio.run_coroutine_threadsafe(
+            message.reply_document(document=file_bytes, caption=caption, parse_mode="Markdown"),
+            loop
+        )
+
         os.unlink(tmp_path)
 
         logger.info("✅ Backup completed")
+        return True
 
     except Exception as e:
         logger.error(f"❌ Backup error: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ Backup error:\n{str(e)}")
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(
+            status_msg.edit_text(f"❌ Backup error:\n{str(e)}"),
+            loop
+        )
+        return False
 
 
-# -------- RESTORE DATABASE (unchanged) --------
+# -------- FULL DATABASE BACKUP (Non‑Blocking) --------
+async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+    user_id = update.effective_user.id
+
+    if user_id != ADMIN_ID:
+        await message.reply_text("❌ Admin only command")
+        return
+
+    # Send immediate response
+    status_msg = await message.reply_text("⏳ Creating backup... This may take a few minutes. I'll send it when ready.")
+
+    # Run the heavy work in a separate thread
+    asyncio.create_task(run_backup_in_thread(status_msg, message))
+
+
+# -------- RESTORE DATABASE --------
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user_id = update.effective_user.id
