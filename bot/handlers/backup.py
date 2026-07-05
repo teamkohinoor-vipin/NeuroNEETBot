@@ -4,8 +4,8 @@ import tempfile
 import os
 from telegram import Update
 from telegram.ext import ContextTypes
-from bot.database.db import db
-from bot.config import ADMIN_ID
+from bot.config import MONGO_URI, ADMIN_ID
+from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from datetime import datetime
 import logging
@@ -27,7 +27,7 @@ def convert_data(data):
     return data
 
 
-# -------- STREAMING BACKUP --------
+# -------- STREAMING BACKUP WITH LONG TIMEOUT --------
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Create a full database backup and send as JSON file."""
     message = update.effective_message
@@ -42,7 +42,18 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_msg = await message.reply_text("⏳ Creating backup... This may take a few minutes.")
 
     try:
-        # Use a temporary file to avoid memory issues
+        # 🔥 Use a separate MongoDB client with LONG timeout (60 seconds)
+        backup_client = AsyncIOMotorClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=60000,
+            connectTimeoutMS=60000,
+            socketTimeoutMS=60000,
+            maxPoolSize=10,
+            minPoolSize=1
+        )
+        backup_db = backup_client["neetquiz"]
+
+        # Use a temporary file
         with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as tmp_file:
             tmp_path = tmp_file.name
             tmp_file.write('{\n')
@@ -60,12 +71,10 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stats = {}
 
             for col_name in collections:
-                # Update status every collection
                 await status_msg.edit_text(f"⏳ Backing up {col_name}...")
                 logger.info(f"Backing up collection: {col_name}")
 
-                # Get count for stats
-                count = await db.db[col_name].count_documents({})
+                count = await backup_db[col_name].count_documents({})
                 stats[col_name] = count
 
                 if not first_collection:
@@ -75,15 +84,14 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 tmp_file.write(f'  "{col_name}": [\n')
                 first_doc = True
 
-                # Stream documents with larger batch size
-                cursor = db.db[col_name].find({}).batch_size(1000)
+                cursor = backup_db[col_name].find({}).batch_size(1000)
                 async for doc in cursor:
                     doc = convert_data(doc)
                     if not first_doc:
                         tmp_file.write(',\n')
                     first_doc = False
                     json.dump(doc, tmp_file, default=str)
-                    # Periodically flush to disk to avoid memory buildup
+                    # Flush periodically
                     if cursor._cursor_id % 100 == 0:
                         tmp_file.flush()
 
@@ -92,6 +100,9 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             tmp_file.write('\n}\n')
             tmp_file.flush()
+
+        # Close backup client
+        backup_client.close()
 
         # Now send the file
         await status_msg.edit_text("⏳ Sending backup file...")
@@ -161,6 +172,8 @@ async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if collection in data:
                 for doc in data[collection]:
                     doc.pop("_id", None)
+                    # Use main db client (no timeout issue here)
+                    from bot.database.db import db
                     await db.db[collection].insert_one(doc)
                     total += 1
                 logger.info(f"✅ Restored {len(data[collection])} records to {collection}")
