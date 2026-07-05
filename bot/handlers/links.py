@@ -13,9 +13,13 @@ GROUPS_PER_PAGE = 5
 
 
 async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("❌ Admin only command")
         return
-    msg = await update.message.reply_text("⏳ Loading group links...")
+
+    msg = await update.message.reply_text("⏳ Fetching group links... This may take a moment.")
+    # Run in background to not block
     asyncio.create_task(load_and_display_links(msg, context))
 
 
@@ -39,9 +43,12 @@ async def load_and_display_links(message, context):
         context.user_data["group_ids"] = valid_ids
         logger.info(f"Loaded {len(valid_ids)} active groups.")
         await display_page(message, context, page=0)
+
+    except asyncio.TimeoutError:
+        await message.edit_text("❌ Timeout: Too many groups to fetch links. Please try again later.")
     except Exception as e:
-        logger.error(f"Error loading links: {e}")
-        await message.edit_text("❌ Failed to load group links.")
+        logger.error(f"Error loading links: {e}", exc_info=True)
+        await message.edit_text(f"❌ Failed to load group links: {str(e)[:100]}")
 
 
 async def fetch_group_details(group_ids, bot):
