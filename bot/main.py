@@ -296,15 +296,6 @@ async def initialize(app: Application):
         logger.error(f"❌ Initialization error: {e}", exc_info=True)
 
 
-async def delete_webhook_force(app: Application):
-    """Force delete webhook to ensure polling works."""
-    try:
-        await app.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook force-deleted.")
-    except Exception as e:
-        logger.error(f"Webhook deletion error: {e}", exc_info=True)
-
-
 # ========== MAIN ==========
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
@@ -389,10 +380,9 @@ def main():
     # -------- ERROR HANDLER --------
     application.add_error_handler(error_handler)
 
-    # -------- FORCE DELETE WEBHOOK (to ensure polling works) --------
-    asyncio.run(delete_webhook_force(application))
-
     logger.info("🤖 Bot started, polling for updates...")
+
+    # run_polling will handle webhook deletion internally via drop_pending_updates
     application.run_polling(drop_pending_updates=True)
 
 
