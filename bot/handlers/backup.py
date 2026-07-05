@@ -28,25 +28,11 @@ def convert_data(data):
     return data
 
 
-# ===== HEAVY WORK IN SEPARATE THREAD =====
-async def run_backup_in_thread(status_msg, message):
-    """Run the backup in a separate thread to avoid blocking the event loop."""
+# ===== HEAVY WORK IN THREAD =====
+# 🔥 PASS LOOP AS PARAMETER – NO get_event_loop() INSIDE THREAD
+def do_backup_sync(status_msg, message, loop):
+    """Synchronous backup – runs in a separate thread."""
     try:
-        result = await asyncio.to_thread(do_backup_sync, status_msg, message)
-        return result
-    except Exception as e:
-        logger.error(f"Backup thread error: {e}", exc_info=True)
-        try:
-            await status_msg.edit_text(f"❌ Backup error:\n{str(e)}")
-        except:
-            pass
-        return None
-
-
-def do_backup_sync(status_msg, message):
-    """Synchronous backup function – runs in a separate thread."""
-    try:
-        # Use sync pymongo client (not Motor) for thread safety
         client = pymongo.MongoClient(
             MONGO_URI,
             serverSelectionTimeoutMS=60000,
@@ -70,10 +56,7 @@ def do_backup_sync(status_msg, message):
             ]
             stats = {}
 
-            loop = asyncio.get_event_loop()
-
             for col_name in collections:
-                # Update status (async-safe)
                 asyncio.run_coroutine_threadsafe(
                     status_msg.edit_text(f"⏳ Backing up {col_name}..."),
                     loop
@@ -99,7 +82,6 @@ def do_backup_sync(status_msg, message):
                     first_doc = False
                     json.dump(doc, tmp_file, default=str)
                     doc_count += 1
-                    # 🔥 FIX: Flush every 100 documents manually
                     if doc_count % 100 == 0:
                         tmp_file.flush()
 
@@ -111,7 +93,6 @@ def do_backup_sync(status_msg, message):
 
         client.close()
 
-        # Read file and send
         with open(tmp_path, 'rb') as f:
             file_data = f.read()
         file_bytes = io.BytesIO(file_data)
@@ -128,24 +109,18 @@ def do_backup_sync(status_msg, message):
             f"📅 Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
-        # Send from thread
-        asyncio.run_coroutine_threadsafe(
-            status_msg.delete(),
-            loop
-        )
+        asyncio.run_coroutine_threadsafe(status_msg.delete(), loop)
         asyncio.run_coroutine_threadsafe(
             message.reply_document(document=file_bytes, caption=caption, parse_mode="Markdown"),
             loop
         )
 
         os.unlink(tmp_path)
-
         logger.info("✅ Backup completed")
         return True
 
     except Exception as e:
         logger.error(f"❌ Backup error: {e}", exc_info=True)
-        loop = asyncio.get_event_loop()
         asyncio.run_coroutine_threadsafe(
             status_msg.edit_text(f"❌ Backup error:\n{str(e)}"),
             loop
@@ -153,7 +128,7 @@ def do_backup_sync(status_msg, message):
         return False
 
 
-# -------- FULL DATABASE BACKUP (Non‑Blocking) --------
+# ===== BACKUP COMMAND =====
 async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user_id = update.effective_user.id
@@ -162,14 +137,14 @@ async def backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("❌ Admin only command")
         return
 
-    # Send immediate response
     status_msg = await message.reply_text("⏳ Creating backup... This may take a few minutes. I'll send it when ready.")
 
-    # Run the heavy work in a separate thread
-    asyncio.create_task(run_backup_in_thread(status_msg, message))
+    loop = asyncio.get_running_loop()
+    # 🔥 Pass loop as argument – thread will use this instead of get_event_loop()
+    await loop.run_in_executor(None, do_backup_sync, status_msg, message, loop)
 
 
-# -------- RESTORE DATABASE --------
+# ===== RESTORE =====
 async def restore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user_id = update.effective_user.id
