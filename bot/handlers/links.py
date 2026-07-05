@@ -9,7 +9,7 @@ import math
 
 logger = logging.getLogger(__name__)
 
-GROUPS_PER_PAGE = 5
+GROUPS_PER_PAGE = 10  # 🔥 Increased from 5 to 10 to show more groups per page
 
 
 async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -45,7 +45,7 @@ async def load_and_display_links(message, context):
 
 
 async def fetch_group_details(group_ids, bot):
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(10)  # 🔥 Increased from 5 to 10 for faster fetching
 
     async def fetch_one(chat_id):
         async with semaphore:
@@ -54,19 +54,19 @@ async def fetch_group_details(group_ids, bot):
                 return
 
             try:
-                chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=3)
+                chat = await asyncio.wait_for(bot.get_chat(chat_id), timeout=5)  # 🔥 Increased timeout
                 title = chat.title
                 try:
-                    link = await asyncio.wait_for(bot.export_chat_invite_link(chat_id), timeout=3)
+                    link = await asyncio.wait_for(bot.export_chat_invite_link(chat_id), timeout=5)
                 except:
-                    link = "❌ Link not available"
+                    link = "❌ Link not available (bot may not be admin)"
                 await db.db.groups.update_one(
                     {"chat_id": chat_id},
                     {"$set": {"title": title, "invite_link": link}},
                     upsert=True
                 )
             except Exception as e:
-                logger.info(f"Removing group {chat_id} (bot not present)")
+                logger.info(f"Removing group {chat_id} (bot not present or no access)")
                 await db.db.groups.delete_one({"chat_id": chat_id})
 
     await asyncio.gather(*[fetch_one(cid) for cid in group_ids])
@@ -76,7 +76,7 @@ async def get_active_group_ids(bot, all_ids):
     valid = []
     for cid in all_ids:
         try:
-            await asyncio.wait_for(bot.get_chat(cid), timeout=2)
+            await asyncio.wait_for(bot.get_chat(cid), timeout=3)  # 🔥 Increased timeout
             valid.append(cid)
         except:
             await db.db.groups.delete_one({"chat_id": cid})
@@ -94,7 +94,6 @@ async def display_page(message_or_query, context, page):
         await edit_text(message_or_query, "No active groups found.")
         return
 
-    # Compute pagination
     total_pages = math.ceil(total / GROUPS_PER_PAGE)
     start = page * GROUPS_PER_PAGE
     end = min(start + GROUPS_PER_PAGE, total)
@@ -112,13 +111,14 @@ async def display_page(message_or_query, context, page):
             link = "❌ Link not available"
         text += f"{idx}. *{title}*\n{link}\n\n"
 
-    # Build inline keyboard with wrap‑around pagination
+    # Build inline keyboard with page number display
     keyboard = []
     if total_pages > 1:
         prev_page = (page - 1) % total_pages
         next_page = (page + 1) % total_pages
         nav = [
             InlineKeyboardButton("⬅️ Back", callback_data=f"links_page_{prev_page}"),
+            InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="noop"),  # 🔥 Show current page
             InlineKeyboardButton("Next ➡️", callback_data=f"links_page_{next_page}")
         ]
         keyboard.append(nav)
@@ -154,7 +154,6 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
 
-    # Extract target page from callback data
     try:
         page = int(query.data.split("_")[-1])
     except:
@@ -163,7 +162,6 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     group_ids = context.user_data.get("group_ids")
     if not group_ids:
-        # If context lost, reload from DB
         group_ids = await get_active_group_ids(context.bot, await get_all_groups())
         context.user_data["group_ids"] = group_ids
 
@@ -173,7 +171,6 @@ async def link_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     total_pages = math.ceil(total / GROUPS_PER_PAGE)
-    # Ensure page is within valid range (should be, but just in case)
     page = page % total_pages
 
     await display_page(query, context, page)
