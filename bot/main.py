@@ -286,9 +286,13 @@ async def handle_custom_time_input(update: Update, context: ContextTypes.DEFAULT
     await update.message.reply_text(f"✅ Score message delete time set to **{seconds} seconds**.", parse_mode="Markdown")
 
 
-# ===== INITIALIZATION =====
+# ===== INITIALIZATION (with webhook deletion) =====
 async def initialize(app: Application):
     try:
+        # 🔥 Force delete webhook to ensure polling works
+        await app.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook deleted.")
+        
         await connect_db(app)
         logger.info("✅ Database connected, starting scheduler...")
         await start_scheduler(app.bot)
@@ -382,7 +386,7 @@ def main():
 
     logger.info("🤖 Bot started, polling for updates...")
 
-    # run_polling will handle webhook deletion internally via drop_pending_updates
+    # run_polling will now work because webhook is deleted in post_init
     application.run_polling(drop_pending_updates=True)
 
 
