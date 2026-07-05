@@ -26,27 +26,33 @@ async def links(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def load_and_display_links(message, context):
     try:
-        group_ids = await get_all_groups()
-        if not group_ids:
-            await message.edit_text("No groups found.")
-            return
-
-        # Fetch missing data for groups that don't have title/link yet
-        await fetch_group_details(group_ids, context.bot)
-
-        # Get only active groups (bot still present)
-        valid_ids = await get_active_group_ids(context.bot, group_ids)
-        if not valid_ids:
-            await message.edit_text("No active groups found.")
-            return
-
-        # Store active group IDs in context for pagination
-        context.user_data["group_ids"] = valid_ids
-        logger.info(f"Loaded {len(valid_ids)} active groups.")
-        await display_page(message, context, page=0)
+        # Use a timeout for the entire operation (30 seconds)
+        await asyncio.wait_for(_load_and_display(message, context), timeout=30)
+    except asyncio.TimeoutError:
+        await message.edit_text("❌ Timeout: Too many groups to fetch links. Please try again later.")
     except Exception as e:
         logger.error(f"Error loading links: {e}", exc_info=True)
-        await message.edit_text("❌ Failed to load group links.")
+        await message.edit_text(f"❌ Failed to load group links: {str(e)[:100]}")
+
+
+async def _load_and_display(message, context):
+    group_ids = await get_all_groups()
+    if not group_ids:
+        await message.edit_text("No groups found.")
+        return
+
+    # Fetch missing data (with timeout)
+    await fetch_group_details(group_ids, context.bot)
+
+    # Get active groups
+    valid_ids = await get_active_group_ids(context.bot, group_ids)
+    if not valid_ids:
+        await message.edit_text("No active groups found.")
+        return
+
+    context.user_data["group_ids"] = valid_ids
+    logger.info(f"Loaded {len(valid_ids)} active groups.")
+    await display_page(message, context, page=0)
 
 
 async def fetch_group_details(group_ids, bot):
@@ -118,7 +124,7 @@ async def display_page(message_or_query, context, page):
             link = "❌ Link not available"
         text += f"{idx}. *{title}*\n{link}\n\n"
 
-    # Build inline keyboard with page number display
+    # Pagination buttons
     keyboard = []
     if total_pages > 1:
         prev_page = (page - 1) % total_pages
