@@ -77,6 +77,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# ===== TEST COMMAND =====
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simple ping command to test if bot is responding."""
+    await update.message.reply_text("Pong! Bot is alive.")
+
+
 async def unmatched_callback(update: Update, context):
     logger.warning(f"Unknown callback: {update.callback_query.data}")
     await update.callback_query.answer(
@@ -308,6 +314,7 @@ def main():
     # -------- COMMAND HANDLERS --------
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("ping", ping))  # <-- TEST COMMAND
 
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("groups", group_broadcast))
