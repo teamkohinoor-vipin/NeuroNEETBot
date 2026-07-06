@@ -456,7 +456,11 @@ def main():
 
     logger.info("🤖 Bot started")
 
-    application.run_polling(drop_pending_updates=True)
+    # 🔥 Added allowed_updates to ensure we receive my_chat_member updates
+    application.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=["message", "callback_query", "poll_answer", "my_chat_member"]
+    )
 
 
 if __name__ == "__main__":
