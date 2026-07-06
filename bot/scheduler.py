@@ -87,7 +87,18 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
         error_msg = str(e)
         logger.error(f"❌ Quiz failed in group {chat_id}: {error_msg}", exc_info=True)
 
-        # Group migration
+        # 🔥 Auto‑remove group for all known permission / membership errors
+        if ("Not enough rights to send polls" in error_msg or
+            "Channel direct messages topic must be specified" in error_msg or
+            "bot is not a member" in error_msg or
+            "bot was kicked" in error_msg or
+            "group chat was deleted" in error_msg):
+            
+            logger.info(f"🗑️ Removing group {chat_id} due to error: {error_msg[:50]}")
+            await remove_group(chat_id)
+            return
+
+        # Group migration (Telegram sometimes returns a new chat id)
         match = re.search(r"New chat id: (-\d+)", error_msg)
         if match:
             new_chat_id = int(match.group(1))
@@ -96,13 +107,7 @@ async def send_quiz_to_group(chat_id: int, bot: Bot):
             await add_group(new_chat_id)
             return
 
-        # Remove if kicked/deleted
-        if "bot was kicked" in error_msg or "group chat was deleted" in error_msg:
-            logger.info(f"🗑️ Removing invalid group {chat_id}")
-            await remove_group(chat_id)
-            return
-
-        # Other errors
+        # Other errors – just log
         logger.error(f"Unhandled error for group {chat_id}: {error_msg}", exc_info=True)
 
 
@@ -155,7 +160,7 @@ async def start_scheduler(bot: Bot):
         scheduler.start()
         logger.info("⏰ Scheduler started successfully!")
 
-        # 🔥 Immediately send a quiz on startup (one-time) to verify functionality
+        # Immediately send a quiz on startup (one-time) to verify functionality
         logger.info("🔍 Sending initial quiz on startup...")
         await send_quiz(bot)
 
