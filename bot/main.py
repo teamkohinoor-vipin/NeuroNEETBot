@@ -87,15 +87,29 @@ async def unmatched_callback(update: Update, context):
 async def track_groups(update: Update, context):
     chat = update.effective_chat
     if chat and chat.type in ["group", "supergroup"]:
-        await add_group(chat.id)
+        chat_id = chat.id
+        logger.info(f"📢 Tracking group {chat_id} (title: {chat.title})")
+        try:
+            await add_group(chat_id)
+            logger.info(f"✅ Group {chat_id} added/updated in database.")
+        except Exception as e:
+            logger.error(f"❌ Failed to add group {chat_id}: {e}")
 
 
 async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.my_chat_member
     if result.new_chat_member.status == "member" and result.old_chat_member.status == "left":
         chat_id = result.chat.id
-        await add_group(chat_id)
+        logger.info(f"🤖 Bot added to group {chat_id}")
 
+        # Save group to database
+        try:
+            await add_group(chat_id)
+            logger.info(f"✅ Group {chat_id} saved on bot addition.")
+        except Exception as e:
+            logger.error(f"❌ Failed to add group on bot addition: {e}")
+
+        # Send welcome message
         bot_username = context.bot.username
         welcome_text = (
             "🧪 *Welcome to NeuroNEETBot!* 🧪\n\n"
@@ -130,15 +144,24 @@ async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-        await send_quiz_to_group(chat_id, context.bot)
+        # 🔥 Immediately send a quiz to the new group
+        logger.info(f"📤 Sending immediate quiz to new group {chat_id}")
+        try:
+            await send_quiz_to_group(chat_id, context.bot)
+            logger.info(f"✅ Immediate quiz sent to group {chat_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to send immediate quiz to group {chat_id}: {e}")
 
 
 async def bot_removed_from_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = update.my_chat_member
     if result.new_chat_member.status in ["left", "kicked"] and result.old_chat_member.status in ["member", "administrator", "creator"]:
         chat_id = result.chat.id
-        await remove_group(chat_id)
-        logger.info(f"Group {chat_id} removed from database (bot left/kicked)")
+        try:
+            await remove_group(chat_id)
+            logger.info(f"🗑️ Group {chat_id} removed from database (bot left/kicked)")
+        except Exception as e:
+            logger.error(f"❌ Failed to remove group {chat_id}: {e}")
 
 
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
